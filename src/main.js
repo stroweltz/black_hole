@@ -73,17 +73,9 @@ const controls = new SpaceFlightControls(camera, renderer.domElement);
 // --- Skybox Textures: Milky Way + Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader();
 
-const milkyWayTex = texLoader.load('./milkyway.jpg');
-milkyWayTex.wrapS = THREE.RepeatWrapping;
-milkyWayTex.wrapT = THREE.ClampToEdgeWrapping;
-milkyWayTex.minFilter = THREE.LinearFilter;
-milkyWayTex.magFilter = THREE.LinearFilter;
-
-const starsTex = texLoader.load('./stars.png');
-starsTex.wrapS = THREE.RepeatWrapping;
-starsTex.wrapT = THREE.ClampToEdgeWrapping;
-starsTex.minFilter = THREE.LinearFilter;
-starsTex.magFilter = THREE.LinearFilter;
+// Initial placeholder texture to construct shader material safely before asset stream completes
+const placeholderTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+placeholderTex.needsUpdate = true;
 
 // --- Black Hole Raymarching Mesh ---
 // Sized generously around camera; position follows camera every frame
@@ -97,8 +89,8 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uPlanetVisible: { value: 1.0 },
     uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
-    uMilkyWay: { value: milkyWayTex },
-    uStars: { value: starsTex },
+    uMilkyWay: { value: placeholderTex },
+    uStars: { value: placeholderTex },
     uSkyBrightness: { value: 0.38 }
   },
   vertexShader: BlackHoleShader.vertexShader,
@@ -593,18 +585,37 @@ function animate() {
   // Render with post-processing
   composer.render();
 
-  // Dismiss preloader smoothly once the first 2 frames are cleanly presented on the canvas
-  if (renderedFrames <= 2) {
+  // Dismiss preloader smoothly once textures are active and 3 clean frames are presented
+  if (isAppReady && renderedFrames < 3) {
     renderedFrames++;
-    if (renderedFrames >= 2) {
-      requestAnimationFrame(hidePreloader);
+    if (renderedFrames === 3) {
+      updatePreloader(100, 'Готово к погружению');
+      setTimeout(() => {
+        requestAnimationFrame(hidePreloader);
+      }, 180);
     }
   }
 }
 
-// --- Preloader Dismissal & Safety Timeout ---
+// --- Preloader Management & UI Updates ---
+const preloaderStatus = document.getElementById('preloader-status');
+const preloaderBarFill = document.querySelector('.preloader-bar-fill');
+
+function updatePreloader(percent, message) {
+  if (preloaderBarFill) {
+    preloaderBarFill.style.width = `${Math.min(100, Math.max(0, Math.round(percent)))}%`;
+  }
+  if (preloaderStatus && message) {
+    preloaderStatus.textContent = message;
+  }
+}
+
+let isAppReady = false;
 let renderedFrames = 0;
+let safetyTimeoutId = null;
+
 function hidePreloader() {
+  if (safetyTimeoutId) clearTimeout(safetyTimeoutId);
   const preloader = document.getElementById('preloader');
   if (!preloader || preloader.classList.contains('fade-out')) return;
   preloader.classList.add('fade-out');
@@ -613,19 +624,137 @@ function hidePreloader() {
   }, 950);
 }
 
-// Fallback safety timeout ensures preloader never gets stuck if tab was initially in background
-setTimeout(hidePreloader, 4000);
+// Fallback safety timeout ensures preloader never gets stuck even on rare network/driver stalls
+safetyTimeoutId = setTimeout(() => {
+  console.warn('Preloader safety timeout triggered');
+  hidePreloader();
+}, 25000);
 
-// --- Shader Precompilation & GPU Warmup ---
-// Precompile all shaders and render 1 warm-up frame before animation starts to eliminate runtime stutter
-try {
-  renderer.compile(scene, camera);
-  composer.render(0);
-} catch (e) {
-  console.warn('Precompile warm-up bypassed:', e);
+/**
+ * Loads a texture with real streaming byte progress.
+ * Uses fetch + ReadableStream when possible, falling back to THREE.TextureLoader.
+ */
+async function loadTextureWithProgress(url, onProgress) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${url}`);
+
+    const contentLength = response.headers.get('content-length');
+    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+    let blob;
+    if (response.body && response.body.getReader) {
+      const reader = response.body.getReader();
+      const chunks = [];
+      let loadedBytes = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loadedBytes += value.length;
+        if (onProgress) {
+          onProgress(loadedBytes, totalBytes || loadedBytes);
+        }
+      }
+      blob = new Blob(chunks);
+    } else {
+      blob = await response.blob();
+      if (onProgress) onProgress(blob.size, blob.size);
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = (err) => reject(err);
+      img.src = objectUrl;
+    });
+    URL.revokeObjectURL(objectUrl);
+
+    const tex = new THREE.Texture(img);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
+  } catch (err) {
+    console.warn(`Progress fetch failed for ${url}, falling back to TextureLoader:`, err);
+    return new Promise((resolve) => {
+      const loader = new THREE.TextureLoader();
+      loader.load(
+        url,
+        (tex) => {
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.needsUpdate = true;
+          resolve(tex);
+        },
+        undefined,
+        (loadErr) => {
+          console.error(`Failed to load texture ${url}:`, loadErr);
+          resolve(placeholderTex);
+        }
+      );
+    });
+  }
 }
 
-animate();
+// --- Application Boot Sequence ---
+async function startSimulation() {
+  const EXPECTED_TOTAL_BYTES = 9940112; // milkyway.jpg (~9.84MB) + stars.png (~96KB)
+  const loadedBytes = { mw: 0, st: 0 };
+  let totalReportedBytes = EXPECTED_TOTAL_BYTES;
+
+  function reportProgress(key, loaded, total) {
+    loadedBytes[key] = loaded;
+    if (key === 'mw' && total > 0) {
+      totalReportedBytes = total + 96779;
+    }
+    const sum = loadedBytes.mw + loadedBytes.st;
+    const progressRatio = Math.min(1.0, sum / Math.max(sum, totalReportedBytes));
+    const progressPercent = Math.min(85, Math.round(progressRatio * 85));
+    const mbLoaded = (sum / (1024 * 1024)).toFixed(1);
+    const mbTotal = (totalReportedBytes / (1024 * 1024)).toFixed(1);
+    updatePreloader(progressPercent, `Загрузка звёздного неба... ${mbLoaded} / ${mbTotal} МБ (${Math.round(progressRatio * 100)}%)`);
+  }
+
+  // Load both textures in parallel with real byte progress
+  const [mwTex, stTex] = await Promise.all([
+    loadTextureWithProgress('./milkyway.jpg', (loaded, total) => reportProgress('mw', loaded, total)),
+    loadTextureWithProgress('./stars.png', (loaded, total) => reportProgress('st', loaded, total))
+  ]);
+
+  updatePreloader(88, 'Подготовка текстур и видеопамяти...');
+  blackHoleMaterial.uniforms.uMilkyWay.value = mwTex;
+  blackHoleMaterial.uniforms.uStars.value = stTex;
+
+  updatePreloader(94, 'Компиляция релятивистских шейдеров...');
+  try {
+    renderer.compile(scene, camera);
+    composer.render(0);
+  } catch (e) {
+    console.warn('Precompile warm-up bypassed:', e);
+  }
+
+  clock.start();
+  isAppReady = true;
+  animate();
+}
+
+startSimulation().catch((err) => {
+  console.error('Simulation initialization failed, falling back to instant launch:', err);
+  try {
+    renderer.compile(scene, camera);
+    composer.render(0);
+  } catch (e) {}
+  isAppReady = true;
+  animate();
+  hidePreloader();
+});
 
 // --- Resize Handler ---
 window.addEventListener('resize', () => {
