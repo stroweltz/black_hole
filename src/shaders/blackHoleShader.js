@@ -153,33 +153,31 @@ export const BlackHoleShader = {
 
       float normR = (r - r_in) / (r_out - r_in);
 
-      // Differential Keplerian rotation in 2D Cartesian plane
-      // Strictly NO branch-cuts or wrap-around seams -> 100% mathematically seamless across 360°!
-      float omega = 2.8 / pow(r, 1.35);
-      float rotAngle = uTime * uDiskSpeed * omega;
-      float cosA = cos(rotAngle);
-      float sinA = sin(rotAngle);
-      vec2 rotPos = mat2(cosA, -sinA, sinA, cosA) * pos.xz;
+      // True Astrophysical Spiral Density Waves (Lin-Shu Density Wave Theory)
+      // Logarithmic spiral pitch k * log(r / r_in) rotates smoothly at disk speed.
+      // Mathematical guarantee: radial gradient is CONSTANT in time and NEVER winds into vinyl record stripes!
+      float phi = atan(pos.z, pos.x);
+      float spiralPitch = 2.4 * log(r / r_in);
+      float rotAngle = phi - uTime * uDiskSpeed * 0.42 + spiralPitch;
 
-      // Soft, organic plasma flow & sheared filaments (NO artificial vinyl record grooves)
-      float turbulence1 = fbm3D(vec3(rotPos * 0.65, r * 0.35 + uTime * 0.04));
-      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.85, r * 0.95 - uTime * 0.06));
+      vec2 rotPos = vec2(r * cos(rotAngle), r * sin(rotAngle));
+
+      // Organic turbulent plasma flow & filaments
+      float turbulence1 = fbm3D(vec3(rotPos * 0.55, r * 0.25 + uTime * 0.05));
+      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.45, r * 0.65 - uTime * 0.07));
       float plasmaNoise = turbulence1 * 0.65 + turbulence2 * 0.35;
 
-      // Broad, gentle natural density waves across the disk
-      float broadBands = 0.88 + 0.12 * sin(r * 2.8 - rotPos.x * 0.35);
+      // Gentle natural dust lanes (NO artificial high-frequency sine grooves)
+      float dustWhisps = smoothstep(0.20, 0.75, turbulence1 * 0.8 + 0.2 * sin(rotAngle * 2.0));
 
-      // Soft organic dust lanes
-      float dustWhisps = smoothstep(0.24, 0.72, turbulence1 * 0.7 + 0.3 * sin(rotPos.y * 0.45 + r * 1.6));
-
-      float structure = 0.68 + 0.38 * (plasmaNoise - 0.5);
-      structure *= broadBands * (0.68 + 0.32 * dustWhisps);
+      float structure = 0.65 + 0.50 * (plasmaNoise - 0.45);
+      structure *= (0.72 + 0.28 * dustWhisps);
       structure = clamp(structure, 0.25, 1.4);
 
       // --- Microscopic Dust Embers (Seamless Cartesian Rotation, Lensed & Occluded) ---
       float emberSparkle = 0.0;
       if (uEmbersVisible > 0.5) {
-        vec2 emberGrid = rotPos * 8.5;
+        vec2 emberGrid = rotPos * 7.5;
         vec2 cell = floor(emberGrid);
         float h = hash(cell);
         if (h > 0.92) {
@@ -233,7 +231,7 @@ export const BlackHoleShader = {
       }
 
       float density = (structure + emberSparkle) * radialProfile * verticalFade;
-      float alpha = clamp(density * 0.92, 0.0, 0.95);
+      float alpha = clamp(density * 1.15, 0.0, 1.0);
       
       vec3 emission = diskCol * density * beaming * 1.55 * uBloomGlow;
 
