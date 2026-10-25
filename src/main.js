@@ -174,6 +174,17 @@ const telRadius = document.getElementById('tel-radius');
 const telShadow = document.getElementById('tel-shadow');
 const telDilation = document.getElementById('tel-dilation');
 
+// Control Buttons & Inputs
+const btnBloom = document.getElementById('btn-bloom');
+const btnParticles = document.getElementById('btn-particles');
+const btnPlanet = document.getElementById('btn-planet');
+const btnAudio = document.getElementById('btn-audio');
+const btnFullscreen = document.getElementById('btn-fullscreen');
+const sliderSpeed = document.getElementById('slider-speed');
+const speedVal = document.getElementById('speed-val');
+const btnUploadBg = document.getElementById('btn-upload-bg');
+const inputBgFile = document.getElementById('input-bg-file');
+
 if (btnBloom) {
   let bloomOn = true;
   btnBloom.addEventListener('click', () => {
