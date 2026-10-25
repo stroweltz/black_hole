@@ -515,7 +515,7 @@ export class CosmicAudio {
         this.onSourceChange(this.sourceMode, this.customFileName);
       }
     } catch (err) {
-      console.warn('Не удалось загрузить аудио NASA, переключение на процедурный синтез:', err);
+      console.warn('Failed to load NASA Perseus audio, falling back to procedural synthesis:', err);
       this.sourceMode = 'synth';
       this.audioBuffer = null;
       if (this.synthMasterGain && this.ctx) {

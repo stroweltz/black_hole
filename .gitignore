@@ -4,6 +4,8 @@ dist/
 *.tif
 *.tiff
 2026-*.png
+*.png
+black_hole_gemini_prompt.md
 78ad4686-*.jpg
 Black Hole*
 Physics of*

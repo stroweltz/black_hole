@@ -19,6 +19,10 @@ An interactive, physically-inspired WebGL2 / Three.js raytracer simulating gravi
   - Pointer events with single-touch look-around and multi-touch pinch thrust.
   - Frame-rate independent exponential damping ($1 - e^{-k \Delta t}$).
   - Relativistic avionics telemetry HUD (event horizon proximity, gravitational time dilation $\gamma$, celestial shadow coverage).
+- **Internationalization & Localization (i18n)**:
+  - Full English and Russian localizations across all UI panels, HUD metrics, toasts, presets, and audio attribution dialogs.
+  - Instant live language switcher (`EN / RU`) in the top navigation bar with `localStorage` persistence.
+  - Direct URL parameter support (`?lang=en` or `?lang=ru`) and dedicated English entrypoint (`en.html`).
 
 ## Project References & Attributions
 

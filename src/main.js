@@ -8,7 +8,12 @@ import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
 import { CosmicAudio, AUDIO_ATTRIBUTION, DEFAULT_AUDIO_URL } from './audio.js';
+import { TRANSLATIONS, getInitialLanguage, saveLanguage } from './i18n.js';
 import UTIF from './utils/utif.js';
+
+// --- Current Language State ---
+let currentLang = getInitialLanguage();
+let currentAudioLang = currentLang;
 
 // --- WebGL Support Check ---
 function isWebGLAvailable() {
@@ -21,9 +26,10 @@ function isWebGLAvailable() {
 }
 
 if (!isWebGLAvailable()) {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   const errDiv = document.createElement('div');
   errDiv.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#05070d;color:#f87171;font-family:sans-serif;padding:24px;text-align:center;z-index:99999;';
-  errDiv.innerHTML = '<h2 style="margin-bottom:12px;color:#f1f5f9;">⚫ Требуется поддержка WebGL</h2><p style="color:#94a3b8;max-width:480px;line-height:1.5;">Ваш браузер или видеокарта в данный момент не поддерживает WebGL. Пожалуйста, включите аппаратное ускорение в настройках браузера или обновите драйвер видеокарты.</p>';
+  errDiv.innerHTML = `<h2 style="margin-bottom:12px;color:#f1f5f9;">${t.webglTitle}</h2><p style="color:#94a3b8;max-width:480px;line-height:1.5;">${t.webglDesc}</p>`;
   document.body.appendChild(errDiv);
 }
 
@@ -145,6 +151,7 @@ window.cosmicAudio = cosmicAudio;
 
 // --- State & Animation Parameters ---
 let diskSpeedMultiplier = 0.85;
+let customSkyboxName = null;
 
 // --- Miller's Planet Dynamic Orbit ---
 const planetOrbitRadius = 5.6;
@@ -157,24 +164,24 @@ const PRESETS = {
   ref: {
     pos: new THREE.Vector3(-9.2, 2.7, 11.8),
     target: new THREE.Vector3(1.6, 0.45, 0.0),
-    title: '🎥 Ракурс из фильма (r = 15.2 Rs)'
+    key: 'toastPresetRef'
   },
   orbit: {
     pos: new THREE.Vector3(-4.8, 0.65, 2.8),
     target: new THREE.Vector3(0.0, 0.0, 0.0),
-    title: '🪐 Орбита Миллер (r = 5.6 Rs)'
+    key: 'toastPresetOrbit'
   },
   sphere: {
     pos: new THREE.Vector3(0.0, 0.45, 1.43),
     target: new THREE.Vector3(0.0, 0.0, 0.0),
-    title: '🌀 Фотонная сфера (r = 1.50 Rs, тень 50% неба)'
+    key: 'toastPresetSphere'
   },
   portal: {
     // Razor-edge event horizon skim: looking radially outward into deep space
     // Relativistic tetrad transformation gathers the entire universe into a sharp circular porthole!
     pos: new THREE.Vector3(0.0, 0.06, 1.014),
     target: new THREE.Vector3(0.0, 2.5, 12.0),
-    title: '🕳️ Край горизонта (r = 1.015 Rs, тень 97.5% неба)'
+    key: 'toastPresetPortal'
   }
 };
 
@@ -182,10 +189,11 @@ function activatePreset(name) {
   const preset = PRESETS[name];
   if (!preset) return;
   controls.resetTo(preset.pos, preset.target);
-  showToast(preset.title);
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+  showToast(t[preset.key]);
 
   // Update preset button active states
-  ['orbit', 'sphere', 'portal'].forEach(id => {
+  ['orbit', 'sphere', 'portal'].forEach((id) => {
     const el = document.getElementById(`btn-view-${id}`);
     if (el) el.classList.toggle('active', id === name);
   });
@@ -215,18 +223,19 @@ const metricLabel = document.getElementById('metric-label');
 if (btnMetricToggle) {
   btnMetricToggle.addEventListener('click', () => {
     isKerrMetric = !isKerrMetric;
+    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
     if (isKerrMetric) {
       btnMetricToggle.classList.add('active');
       if (metricIcon) metricIcon.textContent = '🌀';
-      if (metricLabel) metricLabel.textContent = 'Керр (вращение)';
-      if (telemetryTitle) telemetryTitle.textContent = 'ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)';
-      showToast('🌀 Метрика Керра: вращающаяся Гаргантюа (1 ч = 7 лет на Миллере)', 3500);
+      if (metricLabel) metricLabel.textContent = t.metricKerrText;
+      if (telemetryTitle) telemetryTitle.textContent = t.telemetryTitleKerr;
+      showToast(t.toastMetricKerr, 3500);
     } else {
       btnMetricToggle.classList.remove('active');
       if (metricIcon) metricIcon.textContent = '⚫';
-      if (metricLabel) metricLabel.textContent = 'Шварцшильд (статика)';
-      if (telemetryTitle) telemetryTitle.textContent = 'ТЕЛЕМЕТРИЯ • ШВАРЦШИЛЬД (СТАТИКА)';
-      showToast('⚫ Метрика Шварцшильда: статическая невращающаяся чёрная дыра', 3500);
+      if (metricLabel) metricLabel.textContent = t.metricSchwText;
+      if (telemetryTitle) telemetryTitle.textContent = t.telemetryTitleSchw;
+      showToast(t.toastMetricSchw, 3500);
     }
   });
 }
@@ -236,11 +245,35 @@ const btnBloom = document.getElementById('btn-bloom');
 const btnParticles = document.getElementById('btn-particles');
 const btnPlanet = document.getElementById('btn-planet');
 const btnAudio = document.getElementById('btn-audio');
+const btnQuickAudio = document.getElementById('btn-quick-audio');
 const btnFullscreen = document.getElementById('btn-fullscreen');
 const sliderSpeed = document.getElementById('slider-speed');
 const speedVal = document.getElementById('speed-val');
 const btnUploadBg = document.getElementById('btn-upload-bg');
 const inputBgFile = document.getElementById('input-bg-file');
+const btnToggleUI = document.getElementById('btn-toggle-ui');
+const btnLangToggle = document.getElementById('btn-lang-toggle');
+
+let uiVisible = true;
+
+function updateToggleUIButton() {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+  if (btnToggleUI) {
+    btnToggleUI.title = t.btnToggleUiTitle;
+    const toggleText = btnToggleUI.querySelector('.toggle-text');
+    if (toggleText) {
+      toggleText.textContent = uiVisible ? t.btnToggleUiHide : t.btnToggleUiShow;
+    }
+  }
+}
+
+if (btnToggleUI) {
+  btnToggleUI.addEventListener('click', () => {
+    uiVisible = !uiVisible;
+    document.body.classList.toggle('ui-hidden', !uiVisible);
+    updateToggleUIButton();
+  });
+}
 
 if (btnBloom) {
   let bloomOn = true;
@@ -271,33 +304,33 @@ if (btnPlanet) {
   });
 }
 
-const btnQuickAudio = document.getElementById('btn-quick-audio');
-
 function updateAudioButtons(isPlaying) {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   if (btnAudio) {
     btnAudio.classList.toggle('active', isPlaying);
     btnAudio.innerHTML = isPlaying 
-      ? '<span class="icon">🔊</span> Звук: Вкл' 
-      : '<span class="icon">🔇</span> Звук космоса';
+      ? `<span class="icon">🔊</span> ${t.btnAudioOn}` 
+      : `<span class="icon">🔇</span> ${t.btnAudioOff}`;
   }
   if (btnQuickAudio) {
     btnQuickAudio.classList.toggle('active', isPlaying);
     btnQuickAudio.innerHTML = isPlaying
-      ? '<span class="sound-icon">🔊</span> <span class="sound-text">Звук: Вкл</span>'
-      : '<span class="sound-icon">🔇</span> <span class="sound-text">Звук</span>';
+      ? `<span class="sound-icon">🔊</span> <span class="sound-text">${t.btnQuickAudioOn}</span>`
+      : `<span class="sound-icon">🔇</span> <span class="sound-text">${t.btnQuickAudioOff}</span>`;
   }
 }
 
 function handleAudioToggle() {
   const isPlaying = cosmicAudio.toggle();
   updateAudioButtons(isPlaying);
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   if (isPlaying) {
-    showToast('🔊 Звук включен. ⚠️ При укачивании в наушниках используйте «Режим комфорта» в меню ⓘ', 4500);
+    showToast(t.toastSoundOn, 4500);
     if (!cosmicAudio.audioBuffer && cosmicAudio.isLoadingAudio) {
-      showToast('Загрузка сонификации Perseus (NASA)...', 3000);
+      showToast(t.toastSoundLoading, 3000);
     }
   } else {
-    showToast('🔇 Звук выключен', 2000);
+    showToast(t.toastSoundOff, 2000);
   }
 }
 
@@ -320,7 +353,7 @@ if (sliderVolume) {
   });
 }
 
-// --- Audio Modal & Attribution UI (Point 7) ---
+// --- Audio Modal & Attribution UI ---
 const modalAudioInfo = document.getElementById('modal-audio-info');
 const btnAudioInfo = document.getElementById('btn-audio-info');
 const btnAudioModalClose = document.getElementById('btn-audio-modal-close');
@@ -337,13 +370,12 @@ const comfortModeDesc = document.getElementById('comfort-mode-desc');
 const audioWarningTitle = document.getElementById('audio-warning-title');
 const audioWarningText = document.getElementById('audio-warning-text');
 
-let currentAudioLang = 'ru';
-
 function updateAudioModalUI() {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   const mode = cosmicAudio.sourceMode || 'nasa';
-  const data = (AUDIO_ATTRIBUTION[mode] && AUDIO_ATTRIBUTION[mode][currentAudioLang])
-    ? AUDIO_ATTRIBUTION[mode][currentAudioLang]
-    : AUDIO_ATTRIBUTION.nasa[currentAudioLang];
+  const data = (AUDIO_ATTRIBUTION[mode] && AUDIO_ATTRIBUTION[mode][currentLang])
+    ? AUDIO_ATTRIBUTION[mode][currentLang]
+    : AUDIO_ATTRIBUTION.nasa[currentLang];
 
   if (audioModalTitle) audioModalTitle.textContent = data.title;
   if (audioModalDesc) audioModalDesc.textContent = data.desc;
@@ -353,38 +385,23 @@ function updateAudioModalUI() {
   }
   if (audioSourceStatus) {
     if (mode === 'custom' && cosmicAudio.customFileName) {
-      audioSourceStatus.textContent = currentAudioLang === 'ru'
-        ? `Текущий источник: Свой звук (${cosmicAudio.customFileName})`
-        : `Current source: Custom audio (${cosmicAudio.customFileName})`;
+      audioSourceStatus.textContent = t.audioSourceCustom(cosmicAudio.customFileName);
     } else {
       audioSourceStatus.textContent = data.sourceBadge;
     }
   }
-  if (comfortLabelTitle) {
-    comfortLabelTitle.textContent = currentAudioLang === 'ru'
-      ? '🕊️ Режим комфорта (без укачивания)'
-      : '🕊️ Comfort Mode (anti-nausea)';
-  }
-  if (comfortModeDesc) {
-    comfortModeDesc.textContent = currentAudioLang === 'ru'
-      ? 'Рекомендуется для наушников: центрирует звуковую волну и отключает асинхронные фазовые слои, предотвращая укачивание и тошноту. Снимите галочку, если хотите включить экстремальный релятивистский доплер.'
-      : 'Recommended for headphones: centers sound phase and disables asynchronous Doppler layers to eliminate dizziness and nausea. Uncheck to enable extreme relativistic Doppler.';
-  }
-  if (audioWarningTitle) {
-    audioWarningTitle.textContent = currentAudioLang === 'ru'
-      ? 'Вестибулярное предупреждение'
-      : 'Vestibular Sensitivity Warning';
-  }
-  if (audioWarningText) {
-    audioWarningText.textContent = currentAudioLang === 'ru'
-      ? 'Сонификация NASA создана из рентгеновских волн скопления Персея и содержит глубокие низкочастотные модуляции (~58 Гц). В наушниках они могут вызывать симптомы морской болезни (кинетоз). При дискомфорте снизьте громкость или используйте режим комфорта.'
-      : "NASA's sonification is generated from Perseus X-ray waves and contains deep sub-bass modulation (~58 Hz). In headphones, these can trigger motion sickness (vestibular illusion of rotation). Lower the volume or enable Comfort Mode if discomfort occurs.";
-  }
+  if (comfortLabelTitle) comfortLabelTitle.textContent = t.comfortLabelTitle;
+  if (comfortModeDesc) comfortModeDesc.textContent = t.comfortModeDesc;
+  if (audioWarningTitle) audioWarningTitle.textContent = t.audioWarningTitle;
+  if (audioWarningText) audioWarningText.textContent = t.audioWarningText;
   if (btnAudioLangToggle) {
-    btnAudioLangToggle.textContent = currentAudioLang === 'ru' ? 'EN' : 'RU';
+    btnAudioLangToggle.textContent = currentLang === 'ru' ? 'EN' : 'RU';
   }
   if (btnLoadCustomAudio) {
-    btnLoadCustomAudio.textContent = currentAudioLang === 'ru' ? 'Загрузить свой трек' : 'Load Custom Track';
+    btnLoadCustomAudio.textContent = t.btnLoadCustomAudio;
+  }
+  if (btnAudioModalClose) {
+    btnAudioModalClose.title = t.audioModalCloseTitle;
   }
 }
 
@@ -393,12 +410,8 @@ if (checkAudioComfort) {
   checkAudioComfort.addEventListener('change', (e) => {
     const enabled = e.target.checked;
     cosmicAudio.setComfortMode(enabled);
-    showToast(
-      enabled 
-        ? '🕊️ Режим комфорта включен (звук центрирован)' 
-        : '🌀 Экстремальный релятивистский доплер включен (может укачивать)', 
-      3500
-    );
+    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+    showToast(enabled ? t.toastComfortOn : t.toastComfortOff, 3500);
   });
 }
 
@@ -428,8 +441,7 @@ if (btnAudioModalClose) {
 }
 if (btnAudioLangToggle) {
   btnAudioLangToggle.addEventListener('click', () => {
-    currentAudioLang = currentAudioLang === 'ru' ? 'en' : 'ru';
-    updateAudioModalUI();
+    setAppLanguage(currentLang === 'ru' ? 'en' : 'ru');
   });
 }
 if (modalAudioInfo) {
@@ -471,27 +483,41 @@ if (sliderSpeed) {
   });
 }
 
+function updateFullscreenButton(isFs) {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+  if (btnFullscreen) {
+    btnFullscreen.title = t.btnFullscreenTitle;
+    btnFullscreen.innerHTML = isFs 
+      ? `<span class="icon">⛶</span> ${t.btnFullscreenExit}` 
+      : `<span class="icon">⛶</span> ${t.btnFullscreenEnter}`;
+  }
+}
+
 if (btnFullscreen) {
   btnFullscreen.addEventListener('click', () => {
     const doc = document;
     const docEl = doc.documentElement;
-    const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement;
+    const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement);
+    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
     if (!isFs) {
       const enterFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen;
       if (enterFs) {
-        enterFs.call(docEl).catch(() => {});
-        btnFullscreen.innerHTML = '<span class="icon">⛶</span> Свернуть';
+        enterFs.call(docEl).then(() => updateFullscreenButton(true)).catch(() => {});
       } else {
-        showToast('Полноэкранный режим не поддерживается на этом устройстве (iOS Safari)');
+        showToast(t.toastFullscreenUnsupported);
       }
     } else {
       const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen;
       if (exitFs) {
-        exitFs.call(doc).catch(() => {});
-        btnFullscreen.innerHTML = '<span class="icon">⛶</span> На весь экран';
+        exitFs.call(doc).then(() => updateFullscreenButton(false)).catch(() => {});
       }
     }
+  });
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = !!document.fullscreenElement;
+    updateFullscreenButton(isFs);
   });
 }
 
@@ -509,37 +535,50 @@ function showToast(message, duration = 3000) {
 }
 
 // --- Multi-Format Skybox Image Loader (TIF/TIFF, JPG, PNG, WEBP, AVIF, BMP) ---
+function updateUploadBgButton() {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+  if (btnUploadBg) {
+    if (customSkyboxName) {
+      btnUploadBg.classList.add('active');
+      btnUploadBg.title = t.btnUploadBgLoaded(customSkyboxName);
+      btnUploadBg.innerHTML = `<span>🌌</span> ${t.btnUploadBgTextDone}`;
+    } else {
+      btnUploadBg.classList.remove('active');
+      btnUploadBg.title = t.btnUploadBgTitle;
+      btnUploadBg.innerHTML = `<span>🌌</span> ${t.btnUploadBgText}`;
+    }
+  }
+}
+
 function applySkyboxTexture(texture, name) {
   configureSkyboxTexture(texture);
-
   blackHoleMaterial.uniforms.uMilkyWay.value = texture;
-  if (btnUploadBg) {
-    btnUploadBg.classList.add('active');
-    btnUploadBg.title = `Загружена панорама: ${name}`;
-    btnUploadBg.innerHTML = `<span>🌌</span> Свой фон ✓`;
-  }
+  customSkyboxName = name;
+  updateUploadBgButton();
 }
 
 async function handleSkyboxFile(file) {
   if (!file) return;
   const fileName = file.name;
   const ext = fileName.split('.').pop().toLowerCase();
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
-  showToast(`Загрузка панорамы: ${fileName}...`, 4000);
+  showToast(t.toastSkyboxLoading(fileName), 4000);
 
   if (ext === 'tif' || ext === 'tiff') {
     try {
-      showToast(`Декодирование TIFF (${(file.size / (1024 * 1024)).toFixed(1)} МБ)...`, 6000);
+      const mbSize = (file.size / (1024 * 1024)).toFixed(1);
+      showToast(t.toastTiffDecoding(mbSize), 6000);
       const buffer = await file.arrayBuffer();
       const ifds = UTIF.decode(buffer);
       if (!ifds || !ifds.length) {
-        throw new Error('Файл не содержит корректных блоков IFD');
+        throw new Error(t.toastTiffIfdError);
       }
       UTIF.decodeImage(buffer, ifds[0]);
       const w = ifds[0].width || ifds[0].t256?.[0];
       const h = ifds[0].height || ifds[0].t257?.[0];
       if (!w || !h) {
-        throw new Error('Не удалось определить размеры изображения TIFF');
+        throw new Error(t.toastTiffSizeError);
       }
 
       const rgba = UTIF.toRGBA8(ifds[0]);
@@ -576,10 +615,10 @@ async function handleSkyboxFile(file) {
 
       const texture = new THREE.CanvasTexture(canvas);
       applySkyboxTexture(texture, fileName);
-      showToast(`✓ Панорама TIFF загружена: ${targetW}×${targetH}`, 3500);
+      showToast(t.toastTiffSuccess(targetW, targetH), 3500);
     } catch (err) {
-      console.error('Ошибка при обработке TIFF:', err);
-      showToast(`❌ Ошибка чтения TIFF: ${err.message}`, 4500);
+      console.error('Error processing TIFF:', err);
+      showToast(t.toastTiffError(err.message), 4500);
     }
   } else {
     // JPG, PNG, WEBP, AVIF, BMP, etc.
@@ -588,13 +627,13 @@ async function handleSkyboxFile(file) {
       url,
       (customTex) => {
         applySkyboxTexture(customTex, fileName);
-        showToast(`✓ Панорама загружена: ${fileName}`, 3500);
+        showToast(t.toastImgSuccess(fileName), 3500);
         URL.revokeObjectURL(url);
       },
       undefined,
       (err) => {
-        console.error('Ошибка загрузки текстуры:', err);
-        showToast('❌ Ошибка загрузки изображения', 4500);
+        console.error('Error loading texture:', err);
+        showToast(t.toastImgError, 4500);
       }
     );
   }
@@ -605,16 +644,17 @@ async function handleIncomingFile(file) {
   if (!file) return;
   const fileName = file.name || '';
   const isAudio = file.type.startsWith('audio/') || /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(fileName);
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
   if (isAudio) {
-    showToast(`Загрузка аудио: ${fileName}...`, 3000);
+    showToast(t.toastAudioLoading(fileName), 3000);
     try {
       await cosmicAudio.setSource(file);
-      showToast(`✓ Аудио загружено: ${fileName}`, 3500);
+      showToast(t.toastAudioSuccess(fileName), 3500);
       updateAudioModalUI();
     } catch (err) {
-      console.error('Ошибка загрузки аудио:', err);
-      showToast(`❌ Ошибка загрузки аудио: ${err.message}`, 4500);
+      console.error('Error loading audio:', err);
+      showToast(t.toastAudioError(err.message), 4500);
     }
     return;
   }
@@ -671,6 +711,129 @@ window.addEventListener('drop', (e) => {
   }
 });
 
+// --- Dynamic Global Language Management ---
+export function setAppLanguage(lang) {
+  currentLang = lang;
+  currentAudioLang = lang;
+  saveLanguage(lang);
+
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.en;
+
+  // 1. Update HTML lang & document title
+  document.documentElement.lang = lang;
+  document.title = t.pageTitle;
+
+  // 2. Preloader (if still in DOM)
+  const preloaderTitle = document.getElementById('preloader-title');
+  if (preloaderTitle) preloaderTitle.textContent = t.preloaderTitle;
+
+  // 3. Dropzone
+  const dropzoneTitle = document.getElementById('dropzone-title');
+  if (dropzoneTitle) dropzoneTitle.textContent = t.dropzoneTitle;
+  const dropzoneSub = document.getElementById('dropzone-sub');
+  if (dropzoneSub) dropzoneSub.textContent = t.dropzoneSub;
+
+  // 4. Header & Controls Hint
+  const appTitle = document.getElementById('app-title');
+  if (appTitle) appTitle.textContent = t.appTitle;
+  const appSubtitle = document.getElementById('app-subtitle');
+  if (appSubtitle) appSubtitle.textContent = t.appSubtitle;
+  const controlsHintText = document.getElementById('controls-hint-text');
+  if (controlsHintText) controlsHintText.innerHTML = t.controlsHint;
+
+  // 5. Telemetry HUD
+  if (telemetryTitle) {
+    telemetryTitle.textContent = isKerrMetric ? t.telemetryTitleKerr : t.telemetryTitleSchw;
+  }
+  const telLabelRadius = document.getElementById('tel-label-radius');
+  if (telLabelRadius) telLabelRadius.textContent = t.telRadiusLabel;
+  const telLabelShadow = document.getElementById('tel-label-shadow');
+  if (telLabelShadow) telLabelShadow.textContent = t.telShadowLabel;
+  const telLabelDilation = document.getElementById('tel-label-dilation');
+  if (telLabelDilation) telLabelDilation.textContent = t.telDilationLabel;
+
+  // 6. Language Switcher Pills
+  const pills = document.querySelectorAll('.lang-pill');
+  pills.forEach((p) => {
+    p.classList.toggle('active', p.dataset.lang === lang);
+  });
+  if (btnLangToggle) {
+    btnLangToggle.title = t.btnLangToggleTitle;
+  }
+
+  // 7. Presets Buttons
+  if (btnViewOrbit) {
+    btnViewOrbit.title = t.btnPresetOrbitTitle;
+    btnViewOrbit.innerHTML = `<span>🪐</span> ${t.btnPresetOrbitText}`;
+  }
+  if (btnViewSphere) {
+    btnViewSphere.title = t.btnPresetSphereTitle;
+    btnViewSphere.innerHTML = `<span>🌀</span> ${t.btnPresetSphereText}`;
+  }
+  if (btnViewPortal) {
+    btnViewPortal.title = t.btnPresetPortalTitle;
+    btnViewPortal.innerHTML = `<span>🕳️</span> ${t.btnPresetPortalText}`;
+  }
+
+  // 8. Metric Button
+  if (btnMetricToggle) {
+    btnMetricToggle.title = t.btnMetricTitle;
+  }
+  if (metricLabel) {
+    metricLabel.textContent = isKerrMetric ? t.metricKerrText : t.metricSchwText;
+  }
+
+  // 9. Audio & Volume
+  updateAudioButtons(cosmicAudio.isPlaying);
+  if (sliderVolume && sliderVolume.parentElement) {
+    sliderVolume.parentElement.title = t.audioVolTitle;
+    sliderVolume.setAttribute('aria-label', t.audioVolAria);
+  }
+  if (btnAudioInfo) {
+    btnAudioInfo.title = t.audioInfoTitle;
+    btnAudioInfo.setAttribute('aria-label', t.audioInfoAria);
+  }
+
+  // 10. Visual FX Buttons
+  if (btnBloom) {
+    btnBloom.title = t.btnBloomTitle;
+    btnBloom.innerHTML = `<span>✨</span> ${t.btnBloomText}`;
+  }
+  if (btnParticles) {
+    btnParticles.title = t.btnParticlesTitle;
+    btnParticles.innerHTML = `<span>🌪️</span> ${t.btnParticlesText}`;
+  }
+  if (btnPlanet) {
+    btnPlanet.title = t.btnPlanetTitle;
+    btnPlanet.innerHTML = `<span>🪐</span> ${t.btnPlanetText}`;
+  }
+  updateUploadBgButton();
+
+  // 11. Speed & Fullscreen
+  const speedLabel = document.getElementById('speed-label');
+  if (speedLabel) speedLabel.textContent = t.speedLabel;
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+  updateFullscreenButton(isFs);
+  updateToggleUIButton();
+
+  // 12. Audio Modal
+  updateAudioModalUI();
+}
+
+if (btnLangToggle) {
+  btnLangToggle.addEventListener('click', (e) => {
+    const pill = e.target.closest('.lang-pill');
+    let targetLang = currentLang === 'en' ? 'ru' : 'en';
+    if (pill && pill.dataset.lang) {
+      targetLang = pill.dataset.lang;
+    }
+    setAppLanguage(targetLang);
+  });
+}
+
+// Initial UI synchronization
+setAppLanguage(currentLang);
+
 // --- Animation Loop ---
 const clock = new THREE.Clock();
 let simTime = 0.0;
@@ -680,19 +843,20 @@ const camWorldDir = new THREE.Vector3();
  * Format Kerr relativistic time dilation with iconic Interstellar time scale (1 hr = X years / days / hours)
  */
 function formatKerrDilation(gamma) {
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   if (gamma < 1.05) {
-    return `× 1.0 <span class="unit">(1ч ≈ 1ч)</span>`;
+    return `× 1.0 <span class="unit">${t.dilationApproxHour}</span>`;
   } else if (gamma < 24.0) {
-    return `× ${gamma.toFixed(1)} <span class="unit">(1ч ≈ ${gamma.toFixed(1)}ч)</span>`;
+    return `× ${gamma.toFixed(1)} <span class="unit">${t.dilationApproxHours(gamma.toFixed(1))}</span>`;
   } else if (gamma < 8766.0) {
     const days = (gamma / 24.0).toFixed(1);
-    return `× ${Math.round(gamma).toLocaleString('ru-RU')} <span class="unit">(1ч ≈ ${days}д)</span>`;
+    return `× ${Math.round(gamma).toLocaleString(t.numberLocale)} <span class="unit">${t.dilationApproxDays(days)}</span>`;
   } else if (gamma < 1000000.0) {
     const years = (gamma / 8766.0).toFixed(1);
-    return `<span style="color: #38bdf8;">× ${Math.round(gamma).toLocaleString('ru-RU')}</span> <span class="unit">(1ч = ${years} лет)</span>`;
+    return `<span style="color: #38bdf8;">× ${Math.round(gamma).toLocaleString(t.numberLocale)}</span> <span class="unit">${t.dilationYears(years)}</span>`;
   } else {
     const m = (gamma / 1000000.0).toFixed(1);
-    return `<span style="color: #f43f5e;">× ${m}M</span> <span class="unit">(1ч = века)</span>`;
+    return `<span style="color: #f43f5e;">× ${m}M</span> <span class="unit">${t.dilationEons}</span>`;
   }
 }
 
@@ -749,69 +913,52 @@ function animate() {
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.sin(planetInclination),
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.cos(planetInclination)
   );
-  blackHoleMaterial.uniforms.uPlanetPos.value.copy(planetPos);
 
   // Update space flight controls (WASD movement & smooth mouse rotation)
   controls.update(delta);
 
-  // Dynamic relativistic shadow fraction and Schwarzschild time dilation
-  const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
-  const angleRad = Math.asin(sinVal);
-  let shadowFrac = 0.0;
-  if (camR >= 1.5) {
-    const cosVal = Math.cos(angleRad);
-    shadowFrac = (1.0 - cosVal) * 0.5;
-  } else {
-    const cosVal = Math.cos(angleRad);
-    const skyFrac = (1.0 - cosVal) * 0.5;
-    shadowFrac = 1.0 - skyFrac;
-  }
+  // Update shader uniforms
+  blackHoleMaterial.uniforms.uTime.value = simTime;
+  blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
+  blackHoleMaterial.uniforms.uPlanetPos.value.copy(planetPos);
+
+  // Calculate black hole celestial shadow fraction
+  // r_crit = 1.5 * sqrt(3) ≈ 2.598 Rs (photon capture impact parameter for Schwarzschild)
+  const rCrit = 2.598;
+  const sinAlpha = Math.min(1.0, rCrit / Math.max(camR, 1.002));
+  const cosAlpha = Math.sqrt(Math.max(0.0, 1.0 - sinAlpha * sinAlpha));
+  const shadowFrac = Math.max(0.0, Math.min(1.0, (1.0 - cosAlpha) * 0.5));
 
   // Pure physical Schwarzschild gamma dilation for audio (independent of HUD metric mode)
-  const audioGamma = 1.0 / Math.sqrt(Math.max(0.0005, 1.0 - 1.0 / camR));
+  const physicalGamma = 1.0 / Math.sqrt(Math.max(0.0001, 1.0 - 1.0 / Math.max(camR, 1.002)));
 
-  // Update dynamic relativistic flight telemetry HUD
-  if (telRadius && telShadow && telDilation) {
+  // Real-time Relativistic Telemetry HUD update
+  if (telRadius) {
     telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
+  }
+  if (telShadow) {
     telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
+  }
+  if (telDilation) {
     telDilation.innerHTML = dilationHTML;
-
-    if (camR < 1.15) {
-      telRadius.style.color = '#ff4d4d';
-    } else if (camR < 2.0) {
-      telRadius.style.color = '#ffaa44';
-    } else {
-      telRadius.style.color = '#f1f5f9';
-    }
   }
 
+  // Update real-time audio with observer state
+  camera.getWorldDirection(camWorldDir);
+  cosmicAudio.update(camR, physicalGamma, shadowFrac, camera.position, camWorldDir);
+
   // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
-  if (!controls.isInteracting && !controls.isResetting) {
-    const driftAngle = simTime * 0.025;
-    camera.position.y += Math.sin(driftAngle) * (0.036 * delta);
-    controls.targetYaw += delta * 0.003;
+  if (!controls.isDragging && !controls.isInteracting && !controls.isResetting) {
+    const idleAngle = delta * 0.015;
+    camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), idleAngle);
+    camera.lookAt(0, 0, 0);
     if (camera.position.length() < controls.minRadius) {
       camera.position.setLength(controls.minRadius);
     }
   }
 
-  // Update real-time gravitational audio warping (6.1 & 6.3)
-  camera.getWorldDirection(camWorldDir);
-  cosmicAudio.update({
-    r: camR,
-    gamma: audioGamma,
-    shadowFrac: shadowFrac,
-    camPos: camera.position,
-    camDir: camWorldDir,
-    diskSpeed: diskSpeedMultiplier
-  });
-
   // Center bounding mesh around camera
   blackHoleMesh.position.copy(camera.position);
-
-  // Update uniforms
-  blackHoleMaterial.uniforms.uTime.value = simTime;
-  blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
 
   // Render with post-processing
   composer.render();
@@ -820,7 +967,8 @@ function animate() {
   if (isAppReady && renderedFrames < 3) {
     renderedFrames++;
     if (renderedFrames === 3) {
-      updatePreloader(100, 'Готово к погружению');
+      const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+      updatePreloader(100, t.preloaderReady);
       setTimeout(() => {
         requestAnimationFrame(hidePreloader);
       }, 180);
@@ -939,16 +1087,18 @@ async function startSimulation() {
     const progressPercent = Math.min(85, Math.round(progressRatio * 85));
     const mbLoaded = (loaded / (1024 * 1024)).toFixed(1);
     const mbTotal = (totalReportedBytes / (1024 * 1024)).toFixed(1);
-    updatePreloader(progressPercent, `Загрузка звёздного неба... ${mbLoaded} / ${mbTotal} МБ (${Math.round(progressRatio * 100)}%)`);
+    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+    updatePreloader(progressPercent, t.preloaderLoadingTextures(mbLoaded, mbTotal, Math.round(progressRatio * 100)));
   }
 
   // Load celestial background texture with real byte progress
   const mwTex = await loadTextureWithProgress('./milkyway.jpg', (loaded, total) => reportProgress(loaded, total));
 
-  updatePreloader(88, 'Подготовка текстур и видеопамяти...');
+  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+  updatePreloader(88, t.preloaderPreparingTextures);
   blackHoleMaterial.uniforms.uMilkyWay.value = mwTex;
 
-  updatePreloader(94, 'Компиляция релятивистских шейдеров...');
+  updatePreloader(94, t.preloaderCompilingShader);
   try {
     renderer.compile(scene, camera);
     composer.render(0);

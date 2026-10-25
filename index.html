@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Гаргантюа — Симуляция Чёрной Дыры</title>
+  <title>Gargantua — Black Hole Simulation</title>
   <link rel="stylesheet" href="./src/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22black%22 stroke=%22%23ff9933%22 stroke-width=%228%22/></svg>">
 </head>
@@ -17,8 +17,8 @@
         <div class="preloader-ring"></div>
         <div class="preloader-hole"></div>
       </div>
-      <h2 class="preloader-title">ГАРГАНТЮА</h2>
-      <p id="preloader-status" class="preloader-status">Загрузка космического пространства...</p>
+      <h2 id="preloader-title" class="preloader-title">GARGANTUA</h2>
+      <p id="preloader-status" class="preloader-status">Loading cosmic spacetime...</p>
       <div class="preloader-bar">
         <div class="preloader-bar-fill"></div>
       </div>
@@ -33,8 +33,8 @@
   <!-- Drag and Drop Overlay -->
   <div id="dropzone" class="dropzone">
     <div class="dropzone-box">
-      🌌 Перетащите панораму сюда
-      <small>Поддерживаются форматы: TIF, TIFF, JPG, PNG, WEBP, AVIF</small>
+      <span id="dropzone-title">🌌 Drag and drop celestial panorama here</span>
+      <small id="dropzone-sub">Supported formats: TIF, TIFF, JPG, PNG, WEBP, AVIF</small>
     </div>
   </div>
 
@@ -42,46 +42,54 @@
   <div id="ui-overlay">
     <div class="top-bar">
       <div class="header">
-        <h1 class="title">ГАРГАНТЮА</h1>
-        <p class="subtitle">Сверхмассивная чёрная дыра и гравитационное линзирование</p>
+        <h1 id="app-title" class="title">GARGANTUA</h1>
+        <p id="app-subtitle" class="subtitle">Supermassive Black Hole & Gravitational Lensing</p>
 
         <div class="controls-hint">
           <span class="mouse-icon">🚀</span>
-          <span><strong>WASD</strong> — полёт в космосе • <strong>Зажмите ЛКМ</strong> для обзора 360° • <strong>Shift</strong> — ускорение • <strong>Space / C</strong> — вверх / вниз</span>
+          <span id="controls-hint-text"><strong>WASD</strong> — space flight • <strong>Hold LMB</strong> for 360° view • <strong>Shift</strong> — boost • <strong>Space / C</strong> — ascend / descend</span>
         </div>
       </div>
 
-      <!-- Top Right: Real-time Relativistic Telemetry & Toggle UI button directly underneath -->
+      <!-- Top Right: Real-time Relativistic Telemetry & Control Actions -->
       <div class="top-right-col">
         <div id="telemetry-hud" class="telemetry-hud">
           <div class="telemetry-header">
             <span class="telemetry-dot"></span>
-            <span id="telemetry-title">ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)</span>
+            <span id="telemetry-title">TELEMETRY • KERR (INTERSTELLAR)</span>
           </div>
           <div class="telemetry-grid">
             <div class="telemetry-item">
-              <span class="telemetry-label">РАССТОЯНИЕ (r)</span>
+              <span id="tel-label-radius" class="telemetry-label">DISTANCE (r)</span>
               <span id="tel-radius" class="telemetry-value">15.20 <span class="unit">Rs</span></span>
             </div>
             <div class="telemetry-item">
-              <span class="telemetry-label">ТЕНЬ НА НЕБЕ</span>
+              <span id="tel-label-shadow" class="telemetry-label">SKY SHADOW</span>
               <span id="tel-shadow" class="telemetry-value">0.7%</span>
             </div>
             <div class="telemetry-item">
-              <span class="telemetry-label">ДИЛАТАЦИЯ ВРЕМЕНИ</span>
-              <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1ч ≈ 1ч)</span></span>
+              <span id="tel-label-dilation" class="telemetry-label">TIME DILATION</span>
+              <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1h ≈ 1h)</span></span>
             </div>
           </div>
         </div>
 
         <div class="top-actions-row">
-          <button id="btn-toggle-ui" class="btn-toggle-ui" title="Скрыть/показать панель управления">
+          <button id="btn-toggle-ui" class="btn-toggle-ui" title="Hide/show control panel">
             <span class="toggle-icon">👁</span>
-            <span class="toggle-text">Скрыть интерфейс</span>
+            <span class="toggle-text">Hide UI</span>
           </button>
-          <button id="btn-quick-audio" class="btn-quick-sound" title="Включить/выключить звук космоса">
+          <button id="btn-quick-audio" class="btn-quick-sound" title="Toggle cosmic sound">
             <span class="sound-icon">🔇</span>
-            <span class="sound-text">Звук</span>
+            <span class="sound-text">Sound</span>
+          </button>
+          <button id="btn-lang-toggle" class="btn-lang-toggle" title="Switch language / Сменить язык (EN / RU)">
+            <span class="lang-icon">🌐</span>
+            <span class="lang-switch-pills">
+              <span class="lang-pill active" data-lang="en">EN</span>
+              <span class="lang-divider">/</span>
+              <span class="lang-pill" data-lang="ru">RU</span>
+            </span>
           </button>
         </div>
       </div>
@@ -89,38 +97,38 @@
 
     <div class="controls-panel">
       <!-- Camera Presets -->
-      <button id="btn-view-orbit" class="btn btn-preset" title="Орбита планеты Миллер (r = 5.6 Rs)">
-        <span>🪐</span> Миллер
+      <button id="btn-view-orbit" class="btn btn-preset" title="Miller's Planet Orbit (r = 5.6 Rs)">
+        <span>🪐</span> Miller
       </button>
 
-      <button id="btn-view-sphere" class="btn btn-preset" title="Фотонная сфера: тень 50% неба (r = 1.50 Rs)">
-        <span>🌀</span> Фотонная сфера
+      <button id="btn-view-sphere" class="btn btn-preset" title="Photon Sphere: 50% sky shadow (r = 1.50 Rs)">
+        <span>🌀</span> Photon Sphere
       </button>
 
-      <button id="btn-view-portal" class="btn btn-preset primary highlight" title="Край горизонта (r = 1.015 Rs): вся внешняя Вселенная умещается в сияющий круговой иллюминатор над головой!">
-        <span>🕳️</span> Окно Вселенной
+      <button id="btn-view-portal" class="btn btn-preset primary highlight" title="Horizon Edge (r = 1.015 Rs): the entire external Universe gathers into a radiant circular porthole overhead!">
+        <span>🕳️</span> Universe Window
       </button>
 
       <div class="divider"></div>
 
       <!-- Metric Mode Toggle: Kerr (Interstellar) ↔ Schwarzschild (Static) -->
-      <button id="btn-metric-toggle" class="btn btn-metric active" title="Переключение метрики: Вращающаяся дыра Керра (Интерстеллар) ↔ Статичная дыра Шварцшильда">
-        <span id="metric-icon">🌀</span> <span id="metric-label">Керр (вращение)</span>
+      <button id="btn-metric-toggle" class="btn btn-metric active" title="Toggle Metric: Spinning Kerr hole (Interstellar) ↔ Static Schwarzschild hole">
+        <span id="metric-icon">🌀</span> <span id="metric-label">Kerr (spinning)</span>
       </button>
 
       <div class="divider"></div>
 
       <!-- Audio Control (Prominently placed in primary toolbar with volume slider) -->
       <div class="audio-btn-group">
-        <button id="btn-audio" class="btn btn-util btn-sound" title="Атмосферный звук сонификации NASA (вкл/выкл)">
-          <span class="icon">🔇</span> Звук космоса
+        <button id="btn-audio" class="btn btn-util btn-sound" title="Atmospheric NASA sonification sound (on/off)">
+          <span class="icon">🔇</span> Cosmic Sound
         </button>
-        <div class="audio-vol-wrap" title="Громкость звука">
+        <div class="audio-vol-wrap" title="Audio volume">
           <span class="vol-icon">🔉</span>
-          <input id="slider-volume" type="range" min="0" max="100" value="60" step="1" aria-label="Громкость">
+          <input id="slider-volume" type="range" min="0" max="100" value="60" step="1" aria-label="Volume">
           <span id="volume-val">60%</span>
         </div>
-        <button id="btn-audio-info" class="btn btn-icon" title="О звуке и сонификации Chandra" aria-label="О звуке">
+        <button id="btn-audio-info" class="btn btn-icon" title="About audio & Chandra sonification" aria-label="About audio">
           <span>ⓘ</span>
         </button>
       </div>
@@ -128,66 +136,66 @@
 
       <div class="divider"></div>
 
-      <button id="btn-bloom" class="btn btn-fx active" title="Включить/выключить свечение">
-        <span>✨</span> Свечение
+      <button id="btn-bloom" class="btn btn-fx active" title="Toggle bloom glow">
+        <span>✨</span> Glow
       </button>
 
-      <button id="btn-particles" class="btn btn-fx active" title="Включить/выключить гравитационно линзируемые искры пыли">
-        <span>🌪️</span> Искры пыли
+      <button id="btn-particles" class="btn btn-fx active" title="Toggle gravitationally lensed dust embers">
+        <span>🌪️</span> Dust Embers
       </button>
 
-      <button id="btn-planet" class="btn btn-fx active" title="Включить/выключить планету">
-        <span>🪐</span> Планета
+      <button id="btn-planet" class="btn btn-fx active" title="Toggle Miller's planet">
+        <span>🪐</span> Planet
       </button>
 
       <!-- Custom background upload button -->
-      <button id="btn-upload-bg" class="btn btn-fx" title="Выбрать любую картинку космоса (панораму) с компьютера">
-        <span>🌌</span> Свой фон
+      <button id="btn-upload-bg" class="btn btn-fx" title="Select custom celestial panorama image from computer">
+        <span>🌌</span> Custom Skybox
       </button>
       <input type="file" id="input-bg-file" accept=".tif,.tiff,.jpg,.jpeg,.png,.webp,.avif,.bmp,image/*" style="display: none;">
 
       <div class="divider"></div>
 
       <div class="slider-group">
-        <label for="slider-speed">Скорость:</label>
+        <label id="speed-label" for="slider-speed">Speed:</label>
         <input id="slider-speed" type="range" min="0.0" max="2.5" step="0.1" value="0.85">
         <span id="speed-val">0.9x</span>
       </div>
 
       <div class="divider"></div>
 
-      <button id="btn-fullscreen" class="btn btn-util" title="Полноэкранный режим">
-        <span class="icon">⛶</span> На весь экран
+      <button id="btn-fullscreen" class="btn btn-util" title="Fullscreen mode">
+        <span class="icon">⛶</span> Fullscreen
       </button>
     </div>
   </div>
 
-  <!-- Modal: О звуке -->
+  <!-- Modal: About Audio -->
   <div id="modal-audio-info" class="modal-backdrop" style="display: none;">
     <div class="modal-dialog">
       <div class="modal-header">
         <div class="modal-title">
           <span class="modal-icon">🎵</span>
-          <span id="audio-modal-title">О звуке</span>
+          <span id="audio-modal-title">About the Sound</span>
         </div>
         <div class="modal-actions">
-          <button id="btn-audio-lang-toggle" class="btn-lang" title="Switch language / Сменить язык">EN</button>
-          <button id="btn-audio-modal-close" class="btn-close" title="Закрыть (Esc)">✕</button>
+          <button id="btn-audio-lang-toggle" class="btn-lang" title="Switch language / Сменить язык">RU</button>
+          <button id="btn-audio-modal-close" class="btn-close" title="Close (Esc)">✕</button>
         </div>
       </div>
       <div class="modal-body">
         <div id="audio-modal-desc" class="modal-text"></div>
         <div id="audio-modal-credit" class="modal-credit"></div>
 
-        <!-- Comfort Mode Option (Point 6 & User feedback on nausea/motion sickness) -->
+        <!-- Comfort Mode Option -->
         <div class="modal-comfort-card">
           <label class="comfort-toggle-label" for="check-audio-comfort">
             <input type="checkbox" id="check-audio-comfort" checked>
             <span class="comfort-custom-check"></span>
-            <span class="comfort-title" id="comfort-label-title">🕊️ Режим комфорта (без укачивания)</span>
+            <span class="comfort-title" id="comfort-label-title">🕊️ Comfort Mode (anti-nausea)</span>
           </label>
           <div class="comfort-desc" id="comfort-mode-desc">
-            Рекомендуется для наушников: центрирует звуковую волну и отключает асинхронные фазовые слои, предотвращая укачивание и тошноту. Снимите галочку, если хотите включить экстремальный релятивистский доплер.
+            Recommended for headphones: centers sound phase and disables asynchronous Doppler layers to eliminate dizziness and nausea. Uncheck to enable extreme relativistic Doppler.
           </div>
         </div>
 
@@ -195,35 +203,19 @@
         <div class="modal-warning-card">
           <span class="warning-icon">⚠️</span>
           <div class="warning-body">
-            <span class="warning-title" id="audio-warning-title">Вестибулярное предупреждение</span>
-            <p class="warning-text" id="audio-warning-text">Сонификация NASA создана из рентгеновских волн скопления Персея и содержит глубокие низкочастотные модуляции (~58 Гц). В наушниках они могут вызывать симптомы морской болезни (кинетоз). При дискомфорте снизьте громкость или используйте режим комфорта.</p>
+            <span class="warning-title" id="audio-warning-title">Vestibular Sensitivity Warning</span>
+            <p class="warning-text" id="audio-warning-text">NASA's sonification is generated from Perseus X-ray waves and contains deep sub-bass modulation (~58 Hz). In headphones, these can trigger motion sickness (vestibular illusion of rotation). Lower the volume or enable Comfort Mode if discomfort occurs.</p>
           </div>
         </div>
 
         <div class="modal-source-badge">
-          <span id="audio-source-status">Текущий источник: Сонификация NASA Perseus</span>
-          <button id="btn-load-custom-audio" class="btn btn-sm">Загрузить свой трек</button>
+          <span id="audio-source-status">Current source: NASA Perseus Sonification</span>
+          <button id="btn-load-custom-audio" class="btn btn-sm">Load Custom Track</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script>
-    // Toggle UI visibility logic
-    const btnToggleUI = document.getElementById('btn-toggle-ui');
-    const toggleText = btnToggleUI ? btnToggleUI.querySelector('.toggle-text') : null;
-    let uiVisible = true;
-
-    if (btnToggleUI) {
-      btnToggleUI.addEventListener('click', () => {
-        uiVisible = !uiVisible;
-        document.body.classList.toggle('ui-hidden', !uiVisible);
-        if (toggleText) {
-          toggleText.textContent = uiVisible ? 'Скрыть интерфейс' : 'Показать интерфейс';
-        }
-      });
-    }
-  </script>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>
