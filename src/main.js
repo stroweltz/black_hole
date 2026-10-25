@@ -405,21 +405,51 @@ window.addEventListener('drop', (e) => {
 const clock = new THREE.Clock();
 let simTime = 0.0;
 
+/**
+ * Format Kerr relativistic time dilation with iconic Interstellar time scale (1 hr = X years / days / hours)
+ */
+function formatKerrDilation(gamma) {
+  if (gamma < 1.05) {
+    return `× 1.0 <span class="unit">(1ч ≈ 1ч)</span>`;
+  } else if (gamma < 24.0) {
+    return `× ${gamma.toFixed(1)} <span class="unit">(1ч ≈ ${gamma.toFixed(1)}ч)</span>`;
+  } else if (gamma < 8766.0) {
+    const days = (gamma / 24.0).toFixed(1);
+    return `× ${Math.round(gamma).toLocaleString('ru-RU')} <span class="unit">(1ч ≈ ${days}д)</span>`;
+  } else if (gamma < 1000000.0) {
+    const years = (gamma / 8766.0).toFixed(1);
+    return `<span style="color: #38bdf8;">× ${Math.round(gamma).toLocaleString('ru-RU')}</span> <span class="unit">(1ч = ${years} лет)</span>`;
+  } else {
+    const m = (gamma / 1000000.0).toFixed(1);
+    return `<span style="color: #f43f5e;">× ${m}M</span> <span class="unit">(1ч = века)</span>`;
+  }
+}
+
 function animate() {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();
 
-  // Relativistic gravitational time dilation for the observer:
-  // Proper time dtau of astronaut clock vs coordinate time dt: dt / dtau = 1 / sqrt(1 - rs / r)
-  // As observer descends toward horizon, external universe & orbit move faster (fast-forward)
-  const dilation = 1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR));
-  simTime += delta * dilation;
+  // Kerr Spacetime Relativistic Time Dilation (Kip Thorne's Gargantua Model for Interstellar):
+  // - Endurance orbit (r = 15.2): gamma ≈ 1.06 (1 hr ≈ 1 hr Earth time)
+  // - Miller's Planet (r = 5.6): gamma = 61,320 (1 hr = 7.0 Earth years)
+  // - Event horizon proximity (r -> 1.06): gamma > 100,000 (1 hr = centuries / eons)
+  let kerrDilation;
+  if (camR >= 5.6) {
+    const x = (camR - 5.6) / 2.0;
+    kerrDilation = 1.0 + 61319.0 * Math.exp(-x * x * 0.6);
+  } else {
+    const u = Math.max(0.05, camR - 1.0);
+    kerrDilation = 61320.0 * Math.pow(4.6 / u, 1.2);
+  }
 
-  // Update Miller's planet orbital position:
-  // External planetary orbit is physically coupled to relativistic time dilation factor
-  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * dilation;
+  // Smooth visual simulation progression (prevents stroboscopic jitter while keeping motion responsive)
+  const visualMultiplier = Math.min(3.2, 1.0 / Math.sqrt(Math.max(0.01, 1.0 - 1.0 / camR)));
+  simTime += delta * visualMultiplier;
+
+  // Update Miller's planet orbital position
+  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * visualMultiplier;
   planetPos.set(
     Math.cos(planetOrbitAngle) * planetOrbitRadius,
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.sin(planetInclination),
@@ -446,7 +476,7 @@ function animate() {
 
     telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
     telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
-    telDilation.textContent = `× ${dilation < 100 ? dilation.toFixed(2) : '∞'}`;
+    telDilation.innerHTML = formatKerrDilation(kerrDilation);
 
     if (camR < 1.15) {
       telRadius.style.color = '#ff4d4d';
