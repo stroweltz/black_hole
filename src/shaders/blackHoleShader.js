@@ -254,7 +254,6 @@ export const BlackHoleShader = {
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Seamless whole-space integration: NO artificial bounding sphere discontinuities!
       const int MAX_STEPS = 144;
-      float camDist = length(uCameraPos);
       float exitDist = max(camDist + 2.0, 24.0);
       vec3 prevPos = rayPos;
 
