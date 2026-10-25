@@ -416,33 +416,56 @@ export class CosmicAudio {
   }
 
   /**
-   * Transform raw AudioBuffer into a seamless loop via equal-power crossfade of head and tail (6.0 #4)
+   * Transform raw AudioBuffer into a seamless loop via trailing silence trimming and equal-power crossfade (6.0 #4)
    */
   makeSeamlessBuffer(rawBuffer, fadeDuration = 2.5) {
-    const duration = rawBuffer.duration;
+    const rawLen = rawBuffer.length;
     const sampleRate = rawBuffer.sampleRate;
     const numChannels = rawBuffer.numberOfChannels;
 
-    const fadeSec = Math.min(fadeDuration, duration * 0.25);
+    // 1. Detect trailing silence: audio files often fade out into dead silence
+    // (for example, the NASA Perseus sonification MP3 has ~3.8 seconds of silence at the end).
+    // Trimming the silent tail before crossfading prevents 2-3 second dropouts / stuttering during loop playback.
+    const blockSize = Math.floor(sampleRate * 0.05); // 50ms evaluation block
+    let lastAudibleSample = rawLen;
+    for (let s = rawLen - blockSize; s >= 0; s -= blockSize) {
+      let maxAmp = 0;
+      for (let c = 0; c < numChannels; c++) {
+        const data = rawBuffer.getChannelData(c);
+        for (let i = 0; i < blockSize; i++) {
+          const val = Math.abs(data[s + i] || 0);
+          if (val > maxAmp) maxAmp = val;
+        }
+      }
+      if (maxAmp > 0.012) {
+        lastAudibleSample = Math.min(rawLen, s + blockSize * 2);
+        break;
+      }
+    }
+
+    const trimmedLen = Math.max(Math.floor(sampleRate * 2.0), lastAudibleSample);
+    const trimmedDur = trimmedLen / sampleRate;
+
+    const fadeSec = Math.min(fadeDuration, trimmedDur * 0.25);
     const fadeSamples = Math.floor(fadeSec * sampleRate);
 
-    if (fadeSamples < 128 || duration < 1.0) {
+    if (fadeSamples < 128 || trimmedDur < 1.0) {
       return rawBuffer;
     }
 
-    const newLength = rawBuffer.length - fadeSamples;
+    const newLength = trimmedLen - fadeSamples;
     const seamlessBuffer = this.ctx.createBuffer(numChannels, newLength, sampleRate);
 
     for (let c = 0; c < numChannels; c++) {
       const srcData = rawBuffer.getChannelData(c);
       const dstData = seamlessBuffer.getChannelData(c);
 
-      // 1. Copy middle untouched section
+      // 1. Copy middle untouched section up to newLength
       for (let i = fadeSamples; i < newLength; i++) {
         dstData[i] = srcData[i];
       }
 
-      // 2. Equal-power crossfade of tail into head
+      // 2. Equal-power crossfade of active tail into head
       for (let i = 0; i < fadeSamples; i++) {
         const t = i / fadeSamples;
         const gainHead = Math.sin(t * Math.PI * 0.5);
@@ -532,7 +555,11 @@ export class CosmicAudio {
     // In Comfort Mode: single centered phase-aligned stream (prevents comb-filtering & nausea)
     // In Extreme Doppler Mode: dual layers panned left/right with offset to model approaching/receding disk limbs
     const layerCount = this.comfortMode ? 1 : 2;
-    const offsets = [0.0, dur * 0.42];
+
+    // Initial offsets: must ALWAYS stay strictly in the first half of the audio buffer (< dur * 0.50)
+    // Layer 0 starts at 0.0, layer 1 starts at dur * 0.25 (clamped to max 45% of buffer duration)
+    const maxOffset = dur * 0.45;
+    const offsets = [0.0, Math.min(dur * 0.25, maxOffset)];
     const newLayers = [];
 
     for (let i = 0; i < layerCount; i++) {
@@ -554,7 +581,8 @@ export class CosmicAudio {
       }
       gain.connect(newBufferMaster);
 
-      source.start(now, offsets[i] % dur);
+      const startOffset = Math.min(offsets[i] || 0.0, maxOffset);
+      source.start(now, startOffset);
       newLayers.push({ source, panner, gain });
     }
 
@@ -854,6 +882,8 @@ export class CosmicAudio {
       // Lazy load NASA Perseus audio on first sound activation
       if (!this.audioBuffer && !this.isLoadingAudio) {
         this.loadDefaultAudio();
+      } else if (this.audioBuffer && (!this.bufferLayers || this.bufferLayers.length === 0)) {
+        this.startBufferPlayback(1.0);
       }
     }
 
