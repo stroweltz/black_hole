@@ -1,0 +1,238 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #020204;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #e6e8eb;
+}
+
+#canvas-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* UI Overlay */
+#ui-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 28px 36px;
+  transition: opacity 0.4s ease;
+}
+
+#ui-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Header */
+.header {
+  pointer-events: auto;
+  max-width: 440px;
+}
+
+.title-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #ff9d42;
+  background: rgba(255, 140, 40, 0.12);
+  border: 1px solid rgba(255, 140, 40, 0.28);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  backdrop-filter: blur(8px);
+}
+
+.title {
+  font-family: 'Cinzel', serif;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #ffffff;
+  text-shadow: 0 0 20px rgba(255, 170, 70, 0.4);
+  line-height: 1.15;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #9ba3af;
+  margin-top: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* Hint */
+.controls-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  background: rgba(10, 12, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #cbd5e1;
+  backdrop-filter: blur(12px);
+}
+
+.controls-hint .mouse-icon {
+  font-size: 14px;
+  color: #ffaa44;
+}
+
+/* Controls Bar at bottom */
+.controls-panel {
+  pointer-events: auto;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: rgba(8, 10, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 10px 18px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 140, 40, 0.08);
+  max-width: 95vw;
+}
+
+.btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, rgba(255, 140, 40, 0.3), rgba(255, 80, 20, 0.2));
+  border-color: rgba(255, 150, 50, 0.4);
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  background: linear-gradient(135deg, rgba(255, 140, 40, 0.45), rgba(255, 80, 20, 0.35));
+  border-color: rgba(255, 180, 80, 0.6);
+  box-shadow: 0 0 16px rgba(255, 140, 40, 0.3);
+}
+
+.btn.active {
+  background: rgba(255, 150, 40, 0.22);
+  border-color: rgba(255, 160, 60, 0.55);
+  color: #ffb766;
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 4px;
+}
+
+/* Slider */
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #cbd5e1;
+  padding: 0 6px;
+}
+
+.slider-group label {
+  white-space: nowrap;
+}
+
+.slider-group input[type="range"] {
+  width: 90px;
+  height: 4px;
+  accent-color: #ff9933;
+  cursor: pointer;
+}
+
+#speed-val {
+  min-width: 28px;
+  color: #ffaa44;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Toggle UI Button (Top Right) */
+#btn-toggle-ui {
+  position: absolute;
+  top: 28px;
+  right: 36px;
+  z-index: 20;
+  pointer-events: auto;
+  background: rgba(8, 10, 16, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: all 0.2s ease;
+}
+
+#btn-toggle-ui:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #ui-overlay {
+    padding: 16px 20px;
+  }
+  .title {
+    font-size: 24px;
+  }
+  .controls-panel {
+    gap: 6px;
+    padding: 8px 12px;
+  }
+  .btn {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+}
