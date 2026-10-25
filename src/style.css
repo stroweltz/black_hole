@@ -191,10 +191,17 @@ html, body {
   color: #94a3b8;
 }
 
+.top-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
 /* Toggle UI Button (Positioned squarely under Telemetry HUD) */
 #btn-toggle-ui {
   position: static;
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -202,7 +209,7 @@ html, body {
   background: rgba(10, 14, 24, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #cbd5e1;
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-radius: 10px;
   font-size: 12px;
   font-weight: 500;
@@ -211,6 +218,7 @@ html, body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
   pointer-events: auto;
+  white-space: nowrap;
 }
 
 #btn-toggle-ui:hover {
@@ -218,6 +226,41 @@ html, body {
   border-color: rgba(255, 170, 70, 0.4);
   color: #fff;
   transform: translateY(-1px);
+}
+
+.btn-quick-sound {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(10, 14, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #cbd5e1;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+  pointer-events: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-quick-sound:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 170, 70, 0.4);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.btn-quick-sound.active {
+  background: rgba(255, 150, 40, 0.25);
+  border-color: rgba(255, 160, 60, 0.7);
+  color: #ffb766;
+  box-shadow: 0 0 16px rgba(255, 140, 40, 0.35);
 }
 
 /* UI Hidden State */
@@ -249,9 +292,14 @@ body.ui-hidden .top-right-col {
   width: auto;
 }
 
-body.ui-hidden #btn-toggle-ui {
+body.ui-hidden .top-actions-row {
   width: auto;
-  min-width: 175px;
+}
+
+body.ui-hidden #btn-toggle-ui {
+  flex: none;
+  width: auto;
+  min-width: 165px;
   background: rgba(10, 14, 22, 0.85);
   border-color: rgba(255, 170, 70, 0.4);
   color: #ffb766;
@@ -273,13 +321,29 @@ body.ui-hidden #btn-toggle-ui {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 140, 40, 0.08);
   max-width: 98vw;
   overflow-x: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 170, 70, 0.45) transparent;
   transition: opacity 0.35s ease, transform 0.35s ease;
   box-sizing: border-box;
 }
 
 .controls-panel::-webkit-scrollbar {
-  display: none;
+  display: block;
+  height: 5px;
+}
+
+.controls-panel::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.controls-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 170, 70, 0.4);
+  border-radius: 4px;
+}
+
+.controls-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 180, 80, 0.7);
 }
 
 /* Highlight button (Portal to the Universe) */
@@ -322,25 +386,98 @@ body.ui-hidden #btn-toggle-ui {
   transform: translateY(-1px);
 }
 
-/* Button Standardized Width Tiers (Zero layout shift on toggle) */
+/* Button Standardized Width Tiers (Zero layout shift on toggle, compact for all screens) */
 .btn-preset {
-  width: 148px;
+  min-width: 110px;
+  width: auto;
   flex-shrink: 0;
+  padding: 7px 11px;
 }
 
 #btn-metric-toggle, .btn-metric {
-  width: 196px;
+  min-width: 150px;
+  width: auto;
   flex-shrink: 0;
+  padding: 7px 11px;
 }
 
 .btn-fx {
-  width: 124px;
+  min-width: 95px;
+  width: auto;
   flex-shrink: 0;
+  padding: 7px 10px;
 }
 
 .btn-util {
-  width: 142px;
+  min-width: 115px;
+  width: auto;
   flex-shrink: 0;
+  padding: 7px 12px;
+}
+
+.btn-sound {
+  background: rgba(255, 150, 40, 0.15);
+  border-color: rgba(255, 160, 60, 0.45);
+  font-weight: 600;
+  color: #ffb766;
+}
+
+.btn-sound:hover {
+  background: rgba(255, 150, 40, 0.25);
+  border-color: rgba(255, 180, 80, 0.7);
+  color: #fff;
+}
+
+.btn-sound.active {
+  background: linear-gradient(135deg, rgba(255, 150, 40, 0.35), rgba(200, 70, 15, 0.25));
+  border-color: rgba(255, 180, 80, 0.85);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(255, 140, 40, 0.4);
+}
+
+.audio-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.audio-vol-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 4px 8px;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+.audio-vol-wrap input[type="range"] {
+  width: 58px;
+  height: 4px;
+  accent-color: #ff9933;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+}
+
+.vol-icon {
+  font-size: 13px;
+  opacity: 0.85;
+  user-select: none;
+}
+
+#volume-val {
+  font-size: 11px;
+  color: #ffaa44;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 .btn.primary {

@@ -7,7 +7,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
-import { CosmicAudio } from './audio.js';
+import { CosmicAudio, DEFAULT_AUDIO_URL } from './audio.js';
 import UTIF from './utils/utif.js';
 
 // --- WebGL Support Check ---
@@ -141,6 +141,7 @@ composer.addPass(fxaaPass);
 
 // --- Audio ---
 const cosmicAudio = new CosmicAudio();
+window.cosmicAudio = cosmicAudio;
 
 // --- State & Animation Parameters ---
 let diskSpeedMultiplier = 0.85;
@@ -270,13 +271,73 @@ if (btnPlanet) {
   });
 }
 
-if (btnAudio) {
-  btnAudio.addEventListener('click', () => {
-    const isPlaying = cosmicAudio.toggle();
+const btnQuickAudio = document.getElementById('btn-quick-audio');
+
+function updateAudioButtons(isPlaying) {
+  if (btnAudio) {
     btnAudio.classList.toggle('active', isPlaying);
     btnAudio.innerHTML = isPlaying 
       ? '<span class="icon">🔊</span> Звук: Вкл' 
       : '<span class="icon">🔇</span> Звук космоса';
+  }
+  if (btnQuickAudio) {
+    btnQuickAudio.classList.toggle('active', isPlaying);
+    btnQuickAudio.innerHTML = isPlaying
+      ? '<span class="sound-icon">🔊</span> <span class="sound-text">Звук: Вкл</span>'
+      : '<span class="sound-icon">🔇</span> <span class="sound-text">Звук</span>';
+  }
+}
+
+function handleAudioToggle() {
+  const isPlaying = cosmicAudio.toggle();
+  updateAudioButtons(isPlaying);
+  if (isPlaying) {
+    showToast('🔊 Звук включен. ⚠️ При укачивании в наушниках используйте «Режим комфорта» в меню ⓘ', 4500);
+    if (!cosmicAudio.audioBuffer && cosmicAudio.isLoadingAudio) {
+      showToast('Загрузка сонификации Perseus (NASA)...', 3000);
+    }
+  } else {
+    showToast('🔇 Звук выключен', 2000);
+  }
+}
+
+if (btnAudio) {
+  btnAudio.addEventListener('click', handleAudioToggle);
+}
+
+if (btnQuickAudio) {
+  btnQuickAudio.addEventListener('click', handleAudioToggle);
+}
+
+const sliderVolume = document.getElementById('slider-volume');
+const volumeVal = document.getElementById('volume-val');
+
+if (sliderVolume) {
+  sliderVolume.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (volumeVal) volumeVal.textContent = `${val}%`;
+    cosmicAudio.setVolume(val / 100);
+  });
+}
+
+// --- Audio Attribution Placeholder (Implemented in Point 7) ---
+function updateAudioModalUI() {}
+
+cosmicAudio.onSourceChange = () => {
+  updateAudioModalUI();
+};
+
+if (btnLoadCustomAudio && inputAudioFile) {
+  btnLoadCustomAudio.addEventListener('click', () => {
+    inputAudioFile.click();
+  });
+}
+if (inputAudioFile) {
+  inputAudioFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleIncomingFile(file);
+    }
   });
 }
 
@@ -417,6 +478,29 @@ async function handleSkyboxFile(file) {
   }
 }
 
+// Unified File Ingestion Router (Images for Skybox, Audio for Cosmic Sound)
+async function handleIncomingFile(file) {
+  if (!file) return;
+  const fileName = file.name || '';
+  const isAudio = file.type.startsWith('audio/') || /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(fileName);
+
+  if (isAudio) {
+    showToast(`Загрузка аудио: ${fileName}...`, 3000);
+    try {
+      await cosmicAudio.setSource(file);
+      showToast(`✓ Аудио загружено: ${fileName}`, 3500);
+      updateAudioModalUI();
+    } catch (err) {
+      console.error('Ошибка загрузки аудио:', err);
+      showToast(`❌ Ошибка загрузки аудио: ${err.message}`, 4500);
+    }
+    return;
+  }
+
+  await handleSkyboxFile(file);
+}
+window.handleIncomingFile = handleIncomingFile;
+
 // Custom Skybox Image Upload Support
 if (btnUploadBg && inputBgFile) {
   btnUploadBg.addEventListener('click', () => {
@@ -426,7 +510,7 @@ if (btnUploadBg && inputBgFile) {
   inputBgFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
-      handleSkyboxFile(file);
+      handleIncomingFile(file);
     }
   });
 }
@@ -461,13 +545,14 @@ window.addEventListener('drop', (e) => {
 
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
-    handleSkyboxFile(files[0]);
+    handleIncomingFile(files[0]);
   }
 });
 
 // --- Animation Loop ---
 const clock = new THREE.Clock();
 let simTime = 0.0;
+const camWorldDir = new THREE.Vector3();
 
 /**
  * Format Kerr relativistic time dilation with iconic Interstellar time scale (1 hr = X years / days / hours)
@@ -547,20 +632,24 @@ function animate() {
   // Update space flight controls (WASD movement & smooth mouse rotation)
   controls.update(delta);
 
+  // Dynamic relativistic shadow fraction and Schwarzschild time dilation
+  const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
+  const angleRad = Math.asin(sinVal);
+  let shadowFrac = 0.0;
+  if (camR >= 1.5) {
+    const cosVal = Math.cos(angleRad);
+    shadowFrac = (1.0 - cosVal) * 0.5;
+  } else {
+    const cosVal = Math.cos(angleRad);
+    const skyFrac = (1.0 - cosVal) * 0.5;
+    shadowFrac = 1.0 - skyFrac;
+  }
+
+  // Pure physical Schwarzschild gamma dilation for audio (independent of HUD metric mode)
+  const audioGamma = 1.0 / Math.sqrt(Math.max(0.0005, 1.0 - 1.0 / camR));
+
   // Update dynamic relativistic flight telemetry HUD
   if (telRadius && telShadow && telDilation) {
-    const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
-    const angleRad = Math.asin(sinVal);
-    let shadowFrac;
-    if (camR >= 1.5) {
-      const cosVal = Math.cos(angleRad);
-      shadowFrac = (1.0 - cosVal) * 0.5;
-    } else {
-      const cosVal = Math.cos(angleRad);
-      const skyFrac = (1.0 - cosVal) * 0.5;
-      shadowFrac = 1.0 - skyFrac;
-    }
-
     telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
     telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
     telDilation.innerHTML = dilationHTML;
@@ -584,8 +673,16 @@ function animate() {
     }
   }
 
-  // Update dynamic audio redshift/distance modulation
-  cosmicAudio.update(camera.position.length());
+  // Update real-time gravitational audio warping (6.1 & 6.3)
+  camera.getWorldDirection(camWorldDir);
+  cosmicAudio.update({
+    r: camR,
+    gamma: audioGamma,
+    shadowFrac: shadowFrac,
+    camPos: camera.position,
+    camDir: camWorldDir,
+    diskSpeed: diskSpeedMultiplier
+  });
 
   // Center bounding mesh around camera
   blackHoleMesh.position.copy(camera.position);

@@ -74,10 +74,16 @@
           </div>
         </div>
 
-        <button id="btn-toggle-ui" class="btn-toggle-ui" title="Скрыть/показать панель управления">
-          <span class="toggle-icon">👁</span>
-          <span class="toggle-text">Скрыть интерфейс</span>
-        </button>
+        <div class="top-actions-row">
+          <button id="btn-toggle-ui" class="btn-toggle-ui" title="Скрыть/показать панель управления">
+            <span class="toggle-icon">👁</span>
+            <span class="toggle-text">Скрыть интерфейс</span>
+          </button>
+          <button id="btn-quick-audio" class="btn-quick-sound" title="Включить/выключить звук космоса">
+            <span class="sound-icon">🔇</span>
+            <span class="sound-text">Звук</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -101,6 +107,21 @@
       <button id="btn-metric-toggle" class="btn btn-metric active" title="Переключение метрики: Вращающаяся дыра Керра (Интерстеллар) ↔ Статичная дыра Шварцшильда">
         <span id="metric-icon">🌀</span> <span id="metric-label">Керр (вращение)</span>
       </button>
+
+      <div class="divider"></div>
+
+      <!-- Audio Control (Prominently placed in primary toolbar with volume slider) -->
+      <div class="audio-btn-group">
+        <button id="btn-audio" class="btn btn-util btn-sound" title="Атмосферный звук сонификации NASA (вкл/выкл)">
+          <span class="icon">🔇</span> Звук космоса
+        </button>
+        <div class="audio-vol-wrap" title="Громкость звука">
+          <span class="vol-icon">🔉</span>
+          <input id="slider-volume" type="range" min="0" max="100" value="60" step="1" aria-label="Громкость">
+          <span id="volume-val">60%</span>
+        </div>
+      </div>
+      <input type="file" id="input-audio-file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.aac,.flac" style="display: none;">
 
       <div class="divider"></div>
 
@@ -131,10 +152,6 @@
       </div>
 
       <div class="divider"></div>
-
-      <button id="btn-audio" class="btn btn-util" title="Атмосферный космический звук">
-        <span class="icon">🔇</span> Звук космоса
-      </button>
 
       <button id="btn-fullscreen" class="btn btn-util" title="Полноэкранный режим">
         <span class="icon">⛶</span> На весь экран
