@@ -173,6 +173,32 @@ if (btnViewPortal) btnViewPortal.addEventListener('click', () => activatePreset(
 const telRadius = document.getElementById('tel-radius');
 const telShadow = document.getElementById('tel-shadow');
 const telDilation = document.getElementById('tel-dilation');
+const telemetryTitle = document.getElementById('telemetry-title');
+
+// Metric Mode: true = Kerr (extreme spin / Interstellar), false = Schwarzschild (static)
+let isKerrMetric = true;
+const btnMetricToggle = document.getElementById('btn-metric-toggle');
+const metricIcon = document.getElementById('metric-icon');
+const metricLabel = document.getElementById('metric-label');
+
+if (btnMetricToggle) {
+  btnMetricToggle.addEventListener('click', () => {
+    isKerrMetric = !isKerrMetric;
+    if (isKerrMetric) {
+      btnMetricToggle.classList.add('active');
+      if (metricIcon) metricIcon.textContent = '🌀';
+      if (metricLabel) metricLabel.textContent = 'Керр (вращение)';
+      if (telemetryTitle) telemetryTitle.textContent = 'ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)';
+      showToast('🌀 Метрика Керра: вращающаяся Гаргантюа (1 ч = 7 лет на Миллере)', 3500);
+    } else {
+      btnMetricToggle.classList.remove('active');
+      if (metricIcon) metricIcon.textContent = '⚫';
+      if (metricLabel) metricLabel.textContent = 'Шварцшильд (статика)';
+      if (telemetryTitle) telemetryTitle.textContent = 'ТЕЛЕМЕТРИЯ • ШВАРЦШИЛЬД (СТАТИКА)';
+      showToast('⚫ Метрика Шварцшильда: статическая невращающаяся чёрная дыра', 3500);
+    }
+  });
+}
 
 // Control Buttons & Inputs
 const btnBloom = document.getElementById('btn-bloom');
@@ -431,25 +457,48 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();
 
-  // Kerr Spacetime Relativistic Time Dilation (Kip Thorne's Gargantua Model for Interstellar):
-  // - Endurance orbit (r = 15.2): gamma ≈ 1.06 (1 hr ≈ 1 hr Earth time)
-  // - Miller's Planet (r = 5.6): gamma = 61,320 (1 hr = 7.0 Earth years)
-  // - Event horizon proximity (r -> 1.06): gamma > 100,000 (1 hr = centuries / eons)
-  let kerrDilation;
-  if (camR >= 5.6) {
-    const x = (camR - 5.6) / 2.0;
-    kerrDilation = 1.0 + 61319.0 * Math.exp(-x * x * 0.6);
+  let dilationHTML;
+  let orbitMultiplier;
+  let visualTimeMultiplier;
+
+  if (isKerrMetric) {
+    // --- Kerr Metric (Gargantua / Interstellar Extreme Spin Model) ---
+    // At Endurance orbit (r = 15.2): gamma ≈ 1.06 (1 hr ≈ 1 hr Earth time)
+    // At Miller's Planet (r = 5.6): gamma = 61,320 (1 hr = 7.0 Earth years)
+    // At Horizon (r -> 1.06): gamma > 100,000 (1 hr = centuries / epochs)
+    let kerrDilation;
+    if (camR >= 5.6) {
+      const x = (camR - 5.6) / 2.0;
+      kerrDilation = 1.0 + 61319.0 * Math.exp(-x * x * 0.6);
+    } else {
+      const u = Math.max(0.05, camR - 1.0);
+      kerrDilation = 61320.0 * Math.pow(4.6 / u, 1.2);
+    }
+    dilationHTML = formatKerrDilation(kerrDilation);
+
+    // Relativistic orbital speed of external Miller's planet as seen by the observer:
+    // When the observer dives below Miller (r < 5.6) towards the event horizon (r -> 1.06),
+    // observer's local time slows to a crawl, so external Miller's planet visibly rushes across the sky (~2s per full orbit)!
+    if (camR >= 5.6) {
+      orbitMultiplier = 1.0;
+      visualTimeMultiplier = 1.0;
+    } else {
+      const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - 1.06)));
+      orbitMultiplier = 1.0 + Math.pow(depth, 1.7) * 44.0;
+      visualTimeMultiplier = 1.0 + Math.pow(depth, 1.7) * 2.8;
+    }
   } else {
-    const u = Math.max(0.05, camR - 1.0);
-    kerrDilation = 61320.0 * Math.pow(4.6 / u, 1.2);
+    // --- Schwarzschild Metric (Static, non-rotating black hole) ---
+    const schwDilation = 1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR));
+    dilationHTML = `× ${schwDilation < 100 ? schwDilation.toFixed(2) : '∞'}`;
+    orbitMultiplier = Math.min(4.0, schwDilation);
+    visualTimeMultiplier = Math.min(2.5, schwDilation);
   }
 
-  // Smooth visual simulation progression (prevents stroboscopic jitter while keeping motion responsive)
-  const visualMultiplier = Math.min(3.2, 1.0 / Math.sqrt(Math.max(0.01, 1.0 - 1.0 / camR)));
-  simTime += delta * visualMultiplier;
+  simTime += delta * visualTimeMultiplier;
 
   // Update Miller's planet orbital position
-  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * visualMultiplier;
+  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * orbitMultiplier;
   planetPos.set(
     Math.cos(planetOrbitAngle) * planetOrbitRadius,
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.sin(planetInclination),
@@ -476,7 +525,7 @@ function animate() {
 
     telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
     telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
-    telDilation.innerHTML = formatKerrDilation(kerrDilation);
+    telDilation.innerHTML = dilationHTML;
 
     if (camR < 1.15) {
       telRadius.style.color = '#ff4d4d';

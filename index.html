@@ -42,7 +42,7 @@
       <div id="telemetry-hud" class="telemetry-hud">
         <div class="telemetry-header">
           <span class="telemetry-dot"></span>
-          <span>ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)</span>
+          <span id="telemetry-title">ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)</span>
         </div>
         <div class="telemetry-grid">
           <div class="telemetry-item">
@@ -77,6 +77,13 @@
 
       <button id="btn-view-portal" class="btn primary highlight" title="Субфотонная глубина (r = 1.06 Rs): всё внешнее небо умещается в круг на экране!">
         <span>🕳️</span> Окно Вселенной
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Metric Mode Toggle: Kerr (Interstellar) ↔ Schwarzschild (Static) -->
+      <button id="btn-metric-toggle" class="btn active" title="Переключение метрики: Вращающаяся дыра Керра (Интерстеллар) ↔ Статичная дыра Шварцшильда">
+        <span id="metric-icon">🌀</span> <span id="metric-label">Керр (вращение)</span>
       </button>
 
       <div class="divider"></div>
