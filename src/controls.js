@@ -41,8 +41,9 @@ export class SpaceFlightControls {
     this.rotateSpeed = 0.0026;
     this.rotDamping = 0.12;
 
-    // Boundary constraints (Schwarzschild radius = 1.0, horizon = 1.02)
-    this.minRadius = 1.22; // Allows skimming the photon sphere (1.5) down to 1.22
+    // Boundary constraints (Schwarzschild radius = 1.0, horizon = 1.015)
+    // Allows flying deep into the sub-photon sphere (r = 1.06) where shadow engulfs ~85-90% of the sky!
+    this.minRadius = 1.06;
     this.maxRadius = 55.0; // Deep space boundary
 
     // User interaction detection (for auto-drift)
@@ -258,9 +259,9 @@ export class SpaceFlightControls {
     const r = this.camera.position.length();
 
     // Scale speed dynamically with distance from the black hole
-    // Far: swift travel (7+ units/s); Close: delicate exploration (~0.65 units/s)
-    let baseSpeed = Math.max(0.65, Math.min(7.5, r * 0.38));
-    if (this.keys.boost) baseSpeed *= 2.6;
+    // Far: swift travel (7.5 units/s); Horizon skim (r -> 1.06): delicate exploration (~0.22 units/s)
+    let baseSpeed = Math.max(0.22, Math.min(7.5, (r - 1.0) * 0.85 + 0.15));
+    if (this.keys.boost) baseSpeed *= 2.8;
 
     if (moveDir.lengthSq() > 0.0001) {
       moveDir.normalize();

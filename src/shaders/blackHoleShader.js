@@ -132,7 +132,7 @@ export const BlackHoleShader = {
 
     // --- Physical Accretion Disk Model with Gravitationally Lensed Dust ---
     const float rs = 1.0;            // Schwarzschild radius
-    const float r_eh = 1.02;         // Event Horizon cutoff
+    const float r_eh = 1.015;        // Event Horizon cutoff
     const float r_in = 2.48;         // Inner disk edge
     const float r_out = 10.2;        // Outer disk edge
 
@@ -330,12 +330,15 @@ export const BlackHoleShader = {
 
         // 5. Smooth continuous multi-scale step size:
         // Far away (r > 10): takes larger steps across flat spacetime, conserving steps for lensing.
-        // Near horizon & disk (r <= 10): fine symplectic steps for sharp lensing and photon ring.
+        // Intermediate (2.0 < r <= 10): fine symplectic steps for sharp lensing.
+        // Extreme proximity (r <= 2.0): ultra-fine symplectic sub-stepping proportional to distance from horizon!
         float stepSize;
         if (r > 10.0) {
           stepSize = 0.45 + 0.085 * (r - 10.0);
+        } else if (r > 2.0) {
+          stepSize = clamp(0.045 * r + 0.018, 0.035, 0.45);
         } else {
-          stepSize = clamp(0.045 * r + 0.018, 0.032, 0.45);
+          stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
         }
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
