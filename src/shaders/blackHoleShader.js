@@ -147,7 +147,7 @@ export const BlackHoleShader = {
     const float r_in = 2.48;         // Inner disk edge
     const float r_out = 10.2;        // Outer disk edge
 
-    vec4 sampleDisk(vec3 pos, vec3 rayDir) {
+    vec4 sampleDisk(vec3 pos, vec3 rayDir, vec3 initDir, float pixSpread) {
       float r = length(pos.xz);
       if (r < r_in || r > r_out) return vec4(0.0);
 
@@ -177,14 +177,25 @@ export const BlackHoleShader = {
       // --- Microscopic Dust Embers (Seamless Cartesian Rotation, Lensed & Occluded) ---
       float emberSparkle = 0.0;
       if (uEmbersVisible > 0.5) {
-        vec2 emberGrid = rotPos * 7.5;
-        vec2 cell = floor(emberGrid);
-        float h = hash(cell);
-        if (h > 0.92) {
-          vec2 delta = fract(emberGrid) - 0.5;
-          float distSq = dot(delta, delta);
-          float twinkle = 0.65 + 0.35 * sin(uTime * 6.5 + h * 38.0);
-          emberSparkle = exp(-distSq * 36.0) * twinkle * 1.35;
+        // Analytical pixel footprint estimation on disk calculated without branch-divergent fwidth:
+        // Evaluates ray divergence (pixSpread computed uniformly outside loop), distance to camera,
+        // inclination angle, and gravitational geodesic deflection.
+        // Smoothly attenuates high-frequency sub-pixel sparkling & flickering on compressed secondary lensed images.
+        float distToCam = length(pos - uCameraPos);
+        float deflection = 1.0 - dot(initDir, rayDir);
+        float pixelFootprint = (distToCam * pixSpread / max(abs(rayDir.y), 0.05)) * (1.0 + 8.0 * deflection);
+        float emberFade = 1.0 - smoothstep(0.04, 0.12, pixelFootprint);
+
+        if (emberFade > 0.001) {
+          vec2 emberGrid = rotPos * 7.5;
+          vec2 cell = floor(emberGrid);
+          float h = hash(cell);
+          if (h > 0.92) {
+            vec2 delta = fract(emberGrid) - 0.5;
+            float distSq = dot(delta, delta);
+            float twinkle = 0.65 + 0.35 * sin(uTime * 6.5 + h * 38.0);
+            emberSparkle = exp(-distSq * 36.0) * twinkle * 1.35 * emberFade;
+          }
         }
       }
 
@@ -193,9 +204,15 @@ export const BlackHoleShader = {
       float outerFade = smoothstep(r_out, r_out - 2.5, r);
       float radialProfile = innerCut * outerFade;
 
-      // Vertical thickness falloff
+      // Vertical thickness falloff & physical optical path length
+      // 1. Avoid GLSL pow(negative, 2.0) undefined behavior: exp(-t*t)
+      // 2. Optical depth through Gaussian vertical slab rho(y) = exp(-(y/H)^2):
+      //    Path integral along ray = halfThickness * sqrt(PI) / max(abs(rayDir.y), 0.05)
+      //    Grazing rays traverse longer paths through glowing gas, producing luminous edge glow.
       float halfThickness = 0.032 * r;
-      float verticalFade = exp(-pow(pos.y / max(halfThickness, 0.001), 2.0));
+      float t = pos.y / max(halfThickness, 0.001);
+      float pathLength = (halfThickness * 1.77245385) / max(abs(rayDir.y), 0.05);
+      float verticalFade = exp(-t * t) * pathLength;
 
       // Relativistic Doppler Beaming
       vec3 orbDir = normalize(vec3(-pos.z, 0.0, pos.x));
@@ -281,6 +298,7 @@ export const BlackHoleShader = {
     void main() {
       // Ray begins directly at the camera position in world space
       vec3 localRayDir = normalize(vWorldPosition - uCameraPos);
+      float pixSpread = length(fwidth(localRayDir));
       vec3 rayPos = uCameraPos;
       float camDist = length(rayPos);
 
@@ -295,6 +313,7 @@ export const BlackHoleShader = {
       vec3 perpComp = localRayDir - radComp * radUnit;
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
+      vec3 initRayDir = rayDir;
 
       // Conserved Relativistic Angular Momentum h^2 = |r x v|^2 for geodesic integration
       vec3 hv = cross(rayPos, rayDir);
@@ -396,7 +415,7 @@ export const BlackHoleShader = {
             break;
           } else {
             // Disk crossing is in front of planet: sample disk first, then planet behind
-            vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir));
+            vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir), initRayDir, pixSpread);
             if (diskSamp.a > 0.001) {
               accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
               accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
@@ -414,7 +433,7 @@ export const BlackHoleShader = {
           accumAlpha = 1.0;
           break;
         } else if (hitDiskThisStep) {
-          vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir));
+          vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir), initRayDir, pixSpread);
           if (diskSamp.a > 0.001) {
             accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
             accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
