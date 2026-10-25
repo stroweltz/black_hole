@@ -46,6 +46,15 @@ html, body {
   pointer-events: none;
 }
 
+/* Top Bar Layout */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  gap: 20px;
+}
+
 /* Header */
 .header {
   pointer-events: auto;
@@ -124,6 +133,94 @@ html, body {
   backdrop-filter: blur(20px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 140, 40, 0.08);
   max-width: 95vw;
+}
+
+/* Telemetry HUD (Cockpit Relativistic Avionics) */
+.telemetry-hud {
+  pointer-events: auto;
+  background: rgba(10, 14, 22, 0.75);
+  border: 1px solid rgba(255, 170, 70, 0.25);
+  border-radius: 14px;
+  padding: 10px 16px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 140, 40, 0.08);
+  margin-right: 170px;
+  transition: all 0.3s ease;
+}
+
+.telemetry-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #ffaa44;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.telemetry-dot {
+  width: 6px;
+  height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.telemetry-grid {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.telemetry-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.telemetry-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.telemetry-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+.telemetry-value .unit {
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+/* Highlight button (Portal to the Universe) */
+.btn.highlight {
+  background: linear-gradient(135deg, rgba(255, 150, 40, 0.35), rgba(200, 70, 15, 0.25));
+  border-color: rgba(255, 180, 80, 0.6);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(255, 140, 40, 0.25);
+}
+
+.btn.highlight:hover {
+  background: linear-gradient(135deg, rgba(255, 160, 50, 0.5), rgba(220, 80, 20, 0.4));
+  border-color: rgba(255, 200, 100, 0.85);
+  box-shadow: 0 0 20px rgba(255, 150, 50, 0.45);
+  transform: translateY(-1px) scale(1.02);
 }
 
 .btn {

@@ -29,6 +29,23 @@ const REF_TARGET = new THREE.Vector3(1.6, 0.45, 0.0);
 camera.position.copy(REF_CAM_POS);
 camera.lookAt(REF_TARGET);
 
+// Support URL parameters for precise testing and framing (e.g. ?camX=0&camY=0&camZ=1.08&lookZ=10)
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('camX') && urlParams.has('camY') && urlParams.has('camZ')) {
+  camera.position.set(
+    parseFloat(urlParams.get('camX')),
+    parseFloat(urlParams.get('camY')),
+    parseFloat(urlParams.get('camZ'))
+  );
+  if (urlParams.has('lookX') && urlParams.has('lookY') && urlParams.has('lookZ')) {
+    camera.lookAt(
+      parseFloat(urlParams.get('lookX')),
+      parseFloat(urlParams.get('lookY')),
+      parseFloat(urlParams.get('lookZ'))
+    );
+  }
+}
+
 // --- Space Flight Controls (WASD Flight + 360° Free Mouse Look) ---
 const controls = new SpaceFlightControls(camera, renderer.domElement);
 
@@ -102,23 +119,60 @@ const planetInclination = 0.22; // ~12.6 degrees tilt
 let planetOrbitAngle = 2.1;
 const planetPos = new THREE.Vector3();
 
-function triggerResetToRef() {
-  controls.resetTo(REF_CAM_POS, REF_TARGET);
+// Iconic Camera Presets across Spacetime
+const PRESETS = {
+  ref: {
+    pos: new THREE.Vector3(-9.2, 2.7, 11.8),
+    target: new THREE.Vector3(1.6, 0.45, 0.0),
+    title: '🎥 Ракурс из фильма (r = 15.2 Rs)'
+  },
+  orbit: {
+    pos: new THREE.Vector3(-4.8, 0.65, 2.8),
+    target: new THREE.Vector3(0.0, 0.0, 0.0),
+    title: '🪐 Орбита Миллер (r = 5.6 Rs)'
+  },
+  sphere: {
+    pos: new THREE.Vector3(0.0, 0.45, 1.43),
+    target: new THREE.Vector3(0.0, 0.0, 0.0),
+    title: '🌀 Фотонная сфера (r = 1.50 Rs, тень 50% неба)'
+  },
+  portal: {
+    // Sub-photon sphere: looking radially outward into deep space
+    // Relativistic tetrad transformation gathers the entire universe into a sharp circular porthole!
+    pos: new THREE.Vector3(0.0, 0.32, 1.02),
+    target: new THREE.Vector3(0.0, 3.2, 10.2),
+    title: '🕳️ Окно Вселенной (r = 1.07 Rs, тень 89% неба)'
+  }
+};
+
+function activatePreset(name) {
+  const preset = PRESETS[name];
+  if (!preset) return;
+  controls.resetTo(preset.pos, preset.target);
+  showToast(preset.title);
+
+  // Update preset button active states
+  ['ref', 'orbit', 'sphere', 'portal'].forEach(id => {
+    const el = document.getElementById(`btn-view-${id}`);
+    if (el) el.classList.toggle('active', id === name);
+  });
 }
 
 // --- UI Binding ---
-const btnReset = document.getElementById('btn-reset');
-const btnBloom = document.getElementById('btn-bloom');
-const btnParticles = document.getElementById('btn-particles');
-const btnPlanet = document.getElementById('btn-planet');
-const btnAudio = document.getElementById('btn-audio');
-const btnFullscreen = document.getElementById('btn-fullscreen');
-const sliderSpeed = document.getElementById('slider-speed');
-const speedVal = document.getElementById('speed-val');
-const btnUploadBg = document.getElementById('btn-upload-bg');
-const inputBgFile = document.getElementById('input-bg-file');
+const btnViewRef = document.getElementById('btn-view-ref');
+const btnViewOrbit = document.getElementById('btn-view-orbit');
+const btnViewSphere = document.getElementById('btn-view-sphere');
+const btnViewPortal = document.getElementById('btn-view-portal');
 
-if (btnReset) btnReset.addEventListener('click', triggerResetToRef);
+if (btnViewRef) btnViewRef.addEventListener('click', () => activatePreset('ref'));
+if (btnViewOrbit) btnViewOrbit.addEventListener('click', () => activatePreset('orbit'));
+if (btnViewSphere) btnViewSphere.addEventListener('click', () => activatePreset('sphere'));
+if (btnViewPortal) btnViewPortal.addEventListener('click', () => activatePreset('portal'));
+
+// Telemetry HUD Elements
+const telRadius = document.getElementById('tel-radius');
+const telShadow = document.getElementById('tel-shadow');
+const telDilation = document.getElementById('tel-dilation');
 
 if (btnBloom) {
   let bloomOn = true;
@@ -356,6 +410,35 @@ function animate() {
 
   // Update space flight controls (WASD movement & smooth mouse rotation)
   controls.update(delta);
+
+  // Update dynamic relativistic flight telemetry HUD
+  if (telRadius && telShadow && telDilation) {
+    const camR = camera.position.length();
+    const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
+    const angleRad = Math.asin(sinVal);
+    let shadowFrac;
+    if (camR >= 1.5) {
+      const cosVal = Math.cos(angleRad);
+      shadowFrac = (1.0 - cosVal) * 0.5;
+    } else {
+      const cosVal = Math.cos(angleRad);
+      const skyFrac = (1.0 - cosVal) * 0.5;
+      shadowFrac = 1.0 - skyFrac;
+    }
+    const dilation = 1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR));
+
+    telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
+    telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
+    telDilation.textContent = `× ${dilation < 100 ? dilation.toFixed(2) : '∞'}`;
+
+    if (camR < 1.15) {
+      telRadius.style.color = '#ff4d4d';
+    } else if (camR < 2.0) {
+      telRadius.style.color = '#ffaa44';
+    } else {
+      telRadius.style.color = '#f1f5f9';
+    }
+  }
 
   // Subtle cinematic idle drift when not actively navigating
   if (!controls.isInteracting && !controls.isResetting) {

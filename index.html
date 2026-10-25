@@ -26,20 +26,57 @@
 
   <!-- Overlay UI -->
   <div id="ui-overlay">
-    <div class="header">
-      <div class="title-badge">Общая теория относительности</div>
-      <h1 class="title">ГАРГАНТЮА</h1>
-      <p class="subtitle">Сверхмассивная чёрная дыра и гравитационное линзирование</p>
+    <div class="top-bar">
+      <div class="header">
+        <div class="title-badge">Общая теория относительности</div>
+        <h1 class="title">ГАРГАНТЮА</h1>
+        <p class="subtitle">Сверхмассивная чёрная дыра и гравитационное линзирование</p>
 
-      <div class="controls-hint">
-        <span class="mouse-icon">🚀</span>
-        <span><strong>WASD</strong> — полёт в космосе • <strong>Зажмите ЛКМ</strong> для обзора 360° • <strong>Shift</strong> — ускорение • <strong>Space / C</strong> — вверх / вниз</span>
+        <div class="controls-hint">
+          <span class="mouse-icon">🚀</span>
+          <span><strong>WASD</strong> — полёт в космосе • <strong>Зажмите ЛКМ</strong> для обзора 360° • <strong>Shift</strong> — ускорение • <strong>Space / C</strong> — вверх / вниз</span>
+        </div>
+      </div>
+
+      <!-- Real-time Relativistic Flight Telemetry -->
+      <div id="telemetry-hud" class="telemetry-hud">
+        <div class="telemetry-header">
+          <span class="telemetry-dot"></span>
+          <span>ТЕЛЕМЕТРИЯ ПОЛЁТА</span>
+        </div>
+        <div class="telemetry-grid">
+          <div class="telemetry-item">
+            <span class="telemetry-label">РАССТОЯНИЕ (r)</span>
+            <span id="tel-radius" class="telemetry-value">15.20 <span class="unit">Rs</span></span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">ТЕНЬ НА НЕБЕ</span>
+            <span id="tel-shadow" class="telemetry-value">0.7%</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telemetry-label">ДИЛАТАЦИЯ ВРЕМЕНИ</span>
+            <span id="tel-dilation" class="telemetry-value">× 1.03</span>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="controls-panel">
-      <button id="btn-reset" class="btn primary" title="Вернуться к точному ракурсу с референса">
-        <span>🎥</span> Ракурс из фото
+      <!-- Camera Presets -->
+      <button id="btn-view-ref" class="btn active" title="Ракурс из фильма (r = 15.2 Rs)">
+        <span>🎥</span> Из фильма
+      </button>
+
+      <button id="btn-view-orbit" class="btn" title="Орбита планеты Миллер (r = 5.6 Rs)">
+        <span>🪐</span> Миллер
+      </button>
+
+      <button id="btn-view-sphere" class="btn" title="Фотонная сфера: тень 50% неба (r = 1.50 Rs)">
+        <span>🌀</span> Фотонная сфера
+      </button>
+
+      <button id="btn-view-portal" class="btn primary highlight" title="Субфотонная глубина (r = 1.06 Rs): всё внешнее небо умещается в круг на экране!">
+        <span>🕳️</span> Окно Вселенной
       </button>
 
       <div class="divider"></div>

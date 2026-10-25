@@ -230,8 +230,21 @@ export const BlackHoleShader = {
 
     void main() {
       // Ray begins directly at the camera position in world space
-      vec3 rayDir = normalize(vWorldPosition - uCameraPos);
+      vec3 localRayDir = normalize(vWorldPosition - uCameraPos);
       vec3 rayPos = uCameraPos;
+      float camDist = length(rayPos);
+
+      // General Relativity: Orthonormal Tetrad Transformation for Static Observer in Curved Spacetime
+      // In the Schwarzschild metric, proper radial distance is dl_r = dr / sqrt(1 - rs/r).
+      // A physical camera in the observer's rest frame measures local physical angles.
+      // Transforming to coordinate space scales the radial coordinate velocity by sqrt(1 - rs/r):
+      // As r -> rs, this naturally compresses the entire external universe into a dazzling circular
+      // relativistic exit cone / porthole on the screen, surrounded by the black void of the event horizon.
+      vec3 radUnit = rayPos / max(camDist, 1e-4);
+      float radComp = dot(localRayDir, radUnit);
+      vec3 perpComp = localRayDir - radComp * radUnit;
+      float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
+      vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
