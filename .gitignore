@@ -3,5 +3,6 @@ dist/
 *.log
 *.tif
 *.tiff
+2026-*.png
 .DS_Store
 Thumbs.db

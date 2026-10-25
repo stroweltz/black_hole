@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { SpaceFlightControls } from './controls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -27,17 +27,10 @@ const REF_CAM_POS = new THREE.Vector3(-9.2, 2.7, 11.8);
 const REF_TARGET = new THREE.Vector3(1.6, 0.45, 0.0);
 
 camera.position.copy(REF_CAM_POS);
+camera.lookAt(REF_TARGET);
 
-// --- Orbit Controls ---
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.045;
-controls.rotateSpeed = 0.45;
-controls.zoomSpeed = 0.75;
-controls.minDistance = 3.2;
-controls.maxDistance = 30.0;
-controls.target.copy(REF_TARGET);
-controls.update();
+// --- Space Flight Controls (WASD Flight + 360° Free Mouse Look) ---
+const controls = new SpaceFlightControls(camera, renderer.domElement);
 
 // --- Skybox Textures: Milky Way + Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader();
@@ -64,6 +57,7 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uDiskSpeed: { value: 0.85 },
     uBloomGlow: { value: 1.0 },
     uPlanetVisible: { value: 1.0 },
+    uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: milkyWayTex },
     uStars: { value: starsTex },
@@ -101,33 +95,15 @@ const cosmicAudio = new CosmicAudio();
 
 // --- State & Animation Parameters ---
 let diskSpeedMultiplier = 0.85;
-let autoDrift = true;
-let isUserInteracting = false;
-let userInteractionTimer = null;
 
-controls.addEventListener('start', () => {
-  isUserInteracting = true;
-  if (userInteractionTimer) clearTimeout(userInteractionTimer);
-});
-
-controls.addEventListener('end', () => {
-  userInteractionTimer = setTimeout(() => {
-    isUserInteracting = false;
-  }, 2500);
-});
-
-// Smooth camera reset transition
-let isResetting = false;
-let resetStartTime = 0;
-const resetDuration = 1800;
-let resetStartPos = new THREE.Vector3();
-let resetStartTarget = new THREE.Vector3();
+// --- Miller's Planet Dynamic Orbit ---
+const planetOrbitRadius = 5.6;
+const planetInclination = 0.22; // ~12.6 degrees tilt
+let planetOrbitAngle = 2.1;
+const planetPos = new THREE.Vector3();
 
 function triggerResetToRef() {
-  isResetting = true;
-  resetStartTime = performance.now();
-  resetStartPos.copy(camera.position);
-  resetStartTarget.copy(controls.target);
+  controls.resetTo(REF_CAM_POS, REF_TARGET);
 }
 
 // --- UI Binding ---
@@ -369,26 +345,24 @@ function animate() {
   const delta = clock.getDelta();
   const elapsedTime = clock.getElapsedTime();
 
-  // Smooth camera reset
-  if (isResetting) {
-    const elapsed = performance.now() - resetStartTime;
-    const progress = Math.min(elapsed / resetDuration, 1.0);
-    const ease = progress < 0.5 
-      ? 4 * progress * progress * progress 
-      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+  // Update Miller's planet orbital position
+  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier;
+  planetPos.set(
+    Math.cos(planetOrbitAngle) * planetOrbitRadius,
+    Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.sin(planetInclination),
+    Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.cos(planetInclination)
+  );
+  blackHoleMaterial.uniforms.uPlanetPos.value.copy(planetPos);
 
-    camera.position.lerpVectors(resetStartPos, REF_CAM_POS, ease);
-    controls.target.lerpVectors(resetStartTarget, REF_TARGET, ease);
+  // Update space flight controls (WASD movement & smooth mouse rotation)
+  controls.update(delta);
 
-    if (progress >= 1.0) {
-      isResetting = false;
-    }
-  } else if (autoDrift && !isUserInteracting) {
+  // Subtle cinematic idle drift when not actively navigating
+  if (!controls.isInteracting && !controls.isResetting) {
     const driftAngle = elapsedTime * 0.025;
-    camera.position.y += Math.sin(driftAngle) * 0.0015;
+    camera.position.y += Math.sin(driftAngle) * 0.0006;
+    controls.targetYaw += delta * 0.003;
   }
-
-  controls.update();
 
   // Update dynamic audio redshift/distance modulation
   cosmicAudio.update(camera.position.length());

@@ -7,6 +7,7 @@ export const BlackHoleShader = {
     uDiskSpeed: { value: 0.85 },
     uBloomGlow: { value: 1.0 },
     uPlanetVisible: { value: 1.0 },
+    uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
     uStars: { value: null },
@@ -31,6 +32,7 @@ export const BlackHoleShader = {
     uniform float uDiskSpeed;
     uniform float uBloomGlow;
     uniform float uPlanetVisible;
+    uniform vec3 uPlanetPos;
     uniform float uEmbersVisible;
     uniform sampler2D uMilkyWay;
     uniform sampler2D uStars;
@@ -224,61 +226,10 @@ export const BlackHoleShader = {
       return vec4(emission, alpha);
     }
 
-    // --- Planet (Miller's Planet) ---
-    struct PlanetHit {
-      bool hit;
-      float t;
-      vec3 pos;
-      vec3 normal;
-      vec3 color;
-    };
-
-    PlanetHit intersectPlanet(vec3 rPos, vec3 rDir) {
-      PlanetHit res;
-      res.hit = false;
-      if (uPlanetVisible < 0.5) return res;
-
-      vec3 pCenter = vec3(-4.95, 0.38, 1.85);
-      float pRadius = 0.165;
-
-      vec3 oc = rPos - pCenter;
-      float b = dot(oc, rDir);
-      float c = dot(oc, oc) - pRadius * pRadius;
-      float h = b * b - c;
-
-      if (h > 0.0) {
-        float t = -b - sqrt(h);
-        if (t > 0.0) {
-          res.hit = true;
-          res.t = t;
-          res.pos = rPos + rDir * t;
-          res.normal = normalize(res.pos - pCenter);
-
-          vec3 nPos = res.normal * 14.0;
-          float rockNoise = noise3D(nPos) * 0.6 + noise3D(nPos * 3.5) * 0.4;
-          vec3 rockCol = mix(vec3(0.24, 0.22, 0.21), vec3(0.38, 0.34, 0.30), rockNoise);
-
-          vec3 lightDir = normalize(-pCenter);
-          float diff = max(0.0, dot(res.normal, lightDir));
-          float diskRim = max(0.0, dot(res.normal, vec3(0.8, -0.2, -0.5)));
-          float fresnel = pow(1.0 - max(0.0, dot(res.normal, -rDir)), 3.5);
-
-          vec3 finalColor = rockCol * (diff * 1.5 * vec3(1.15, 0.88, 0.6) + 0.03 * vec3(0.2, 0.2, 0.3))
-                          + diskRim * 0.65 * vec3(0.95, 0.48, 0.18)
-                          + fresnel * 0.45 * vec3(1.0, 0.75, 0.45);
-
-          res.color = finalColor;
-        }
-      }
-      return res;
-    }
-
     void main() {
       // Ray begins directly at the camera position in world space
       vec3 rayDir = normalize(vWorldPosition - uCameraPos);
       vec3 rayPos = uCameraPos;
-
-      PlanetHit pHit = intersectPlanet(rayPos, rayDir);
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
@@ -296,25 +247,18 @@ export const BlackHoleShader = {
         float r = length(rayPos);
         minRadius = min(minRadius, r);
 
-        // Planet hit
-        if (pHit.hit && length(rayPos - uCameraPos) >= pHit.t) {
-          accumColor += (1.0 - accumAlpha) * pHit.color;
-          accumAlpha = 1.0;
-          break;
-        }
-
-        // Event Horizon hit: light is completely captured into the singularity
+        // 1. Event Horizon hit: light is completely captured into the singularity
         if (r <= r_eh) {
           hitHorizon = true;
           break;
         }
 
-        // Seamless exit: when ray is beyond outer disk and heading away into deep space
+        // 2. Seamless exit: when ray is beyond outer disk and heading away into deep space
         if (r > exitDist && dot(rayPos, rayDir) > 0.0) {
           break;
         }
 
-        // Check equatorial plane crossing (y = 0)
+        // 3. Check equatorial plane crossing (y = 0)
         if (prevPos.y * rayPos.y <= 0.0 && i > 0) {
           float tCross = prevPos.y / (prevPos.y - rayPos.y + 1e-6);
           vec3 hitPos = mix(prevPos, rayPos, clamp(tCross, 0.0, 1.0));
@@ -327,7 +271,62 @@ export const BlackHoleShader = {
           }
         }
 
-        // Smooth continuous multi-scale step size:
+        // 4. Gravitationally Lensed Miller's Planet
+        // Evaluated along every curved geodesic segment in Schwarzschild spacetime!
+        if (uPlanetVisible > 0.5 && i > 0) {
+          vec3 seg = rayPos - prevPos;
+          float segLen = length(seg);
+          if (segLen > 1e-5) {
+            vec3 segDir = seg / segLen;
+            vec3 toP = prevPos - uPlanetPos;
+            float pRad = 0.22;
+            float boundR = segLen + pRad + 0.35;
+            if (dot(toP, toP) < boundR * boundR) {
+              float b = dot(toP, segDir);
+              float c = dot(toP, toP) - pRad * pRad;
+              float discr = b * b - c;
+              if (discr >= 0.0) {
+                float tHit = -b - sqrt(discr);
+                if (tHit >= 0.0 && tHit <= segLen) {
+                  vec3 pHitPos = prevPos + segDir * tHit;
+                  vec3 pNorm = normalize(pHitPos - uPlanetPos);
+
+                  // Procedural Miller's Water Planet with Waves & Clouds
+                  vec3 pLocal = pNorm * 11.0;
+                  float clouds = smoothstep(0.40, 0.76, fbm3D(pLocal + vec3(uTime * 0.06, 0.0, 0.0)));
+                  float waves = noise3D(pLocal * 4.0);
+
+                  vec3 oceanCol = mix(vec3(0.04, 0.18, 0.36), vec3(0.08, 0.30, 0.50), waves * 0.5 + 0.5);
+                  vec3 cloudCol = vec3(0.92, 0.94, 0.98);
+                  vec3 surfCol = mix(oceanCol, cloudCol, clouds * 0.80);
+
+                  // Illuminating light source is the incandescent accretion disk at (0,0,0)
+                  vec3 lightDir = normalize(-uPlanetPos);
+                  float diff = max(0.0, dot(pNorm, lightDir));
+                  float ambient = 0.04;
+                  float fresnel = pow(1.0 - max(0.0, dot(pNorm, -segDir)), 3.0);
+
+                  // Ocean specular reflection
+                  vec3 reflDir = reflect(segDir, pNorm);
+                  float spec = pow(max(0.0, dot(reflDir, lightDir)), 22.0) * (1.0 - clouds);
+
+                  vec3 pLightCol = vec3(1.25, 1.05, 0.85); // disk sunlight
+                  vec3 atmoCol = vec3(0.35, 0.65, 0.95);   // azure atmosphere
+
+                  vec3 finalPlanetCol = surfCol * (diff * pLightCol + ambient * vec3(0.2, 0.25, 0.35))
+                                      + spec * 1.8 * pLightCol
+                                      + fresnel * 0.65 * atmoCol;
+
+                  accumColor += (1.0 - accumAlpha) * finalPlanetCol;
+                  accumAlpha = 1.0;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        // 5. Smooth continuous multi-scale step size:
         // Far away (r > 10): takes larger steps across flat spacetime, conserving steps for lensing.
         // Near horizon & disk (r <= 10): fine symplectic steps for sharp lensing and photon ring.
         float stepSize;
@@ -348,13 +347,6 @@ export const BlackHoleShader = {
         rayDir = normalize(rayDir + accel * stepSize);
         prevPos = rayPos;
         rayPos = halfPos + rayDir * (stepSize * 0.5);
-      }
-
-      // Delicate, sharp Photon Ring hugging event horizon
-      if (!hitHorizon && minRadius > r_eh && minRadius < r_eh * 1.48) {
-        float ringDist = abs(minRadius - 1.45) / 0.18;
-        float photonRing = exp(-ringDist * ringDist * 16.0);
-        accumColor += (1.0 - accumAlpha) * vec3(1.25, 1.10, 0.85) * photonRing * 1.65 * uBloomGlow;
       }
 
       // Gravitationally lensed deep space skybox

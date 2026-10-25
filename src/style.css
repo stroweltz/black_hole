@@ -104,6 +104,11 @@ html, body {
   color: #ffaa44;
 }
 
+.controls-hint strong {
+  color: #ffad5a;
+  font-weight: 600;
+}
+
 /* Controls Bar at bottom */
 .controls-panel {
   pointer-events: auto;
