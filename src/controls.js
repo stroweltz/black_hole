@@ -124,8 +124,8 @@ export class SpaceFlightControls {
       const forward = new THREE.Vector3();
       this.camera.getWorldDirection(forward);
       const r = this.camera.position.length();
-      // Impulse reduced 4x for smooth and controllable thruster adjustment
-      const impulse = -Math.sign(e.deltaY) * Math.max(0.15, r * 0.045);
+      // Impulse reduced 8x total for ultra-smooth and precise thruster adjustment
+      const impulse = -Math.sign(e.deltaY) * Math.max(0.075, r * 0.022);
       this.velocity.addScaledVector(forward, impulse);
     }, { passive: false });
 
@@ -259,9 +259,9 @@ export class SpaceFlightControls {
 
     const r = this.camera.position.length();
 
-    // Scale speed dynamically with distance from the black hole (reduced 4x for smooth cinematic piloting)
-    // Deep space: ~1.85 units/s; Horizon skim (r -> 1.06): delicate exploration (~0.055 units/s)
-    let baseSpeed = Math.max(0.055, Math.min(1.85, ((r - 1.0) * 0.85 + 0.15) * 0.25));
+    // Scale speed dynamically with distance from the black hole (reduced by 8x total for ultra-smooth cinematic piloting)
+    // Deep space: ~0.92 units/s; Horizon skim (r -> 1.06): delicate exploration (~0.028 units/s)
+    let baseSpeed = Math.max(0.028, Math.min(0.92, ((r - 1.0) * 0.85 + 0.15) * 0.125));
     if (this.keys.boost) baseSpeed *= 2.8;
 
     if (moveDir.lengthSq() > 0.0001) {

@@ -403,15 +403,23 @@ window.addEventListener('drop', (e) => {
 
 // --- Animation Loop ---
 const clock = new THREE.Clock();
+let simTime = 0.0;
 
 function animate() {
   requestAnimationFrame(animate);
 
-  const delta = clock.getDelta();
-  const elapsedTime = clock.getElapsedTime();
+  const delta = Math.min(clock.getDelta(), 0.1);
+  const camR = camera.position.length();
 
-  // Update Miller's planet orbital position
-  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier;
+  // Relativistic gravitational time dilation for the observer:
+  // Proper time dtau of astronaut clock vs coordinate time dt: dt / dtau = 1 / sqrt(1 - rs / r)
+  // As observer descends toward horizon, external universe & orbit move faster (fast-forward)
+  const dilation = 1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR));
+  simTime += delta * dilation;
+
+  // Update Miller's planet orbital position:
+  // External planetary orbit is physically coupled to relativistic time dilation factor
+  planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * dilation;
   planetPos.set(
     Math.cos(planetOrbitAngle) * planetOrbitRadius,
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.sin(planetInclination),
@@ -424,7 +432,6 @@ function animate() {
 
   // Update dynamic relativistic flight telemetry HUD
   if (telRadius && telShadow && telDilation) {
-    const camR = camera.position.length();
     const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
     const angleRad = Math.asin(sinVal);
     let shadowFrac;
@@ -436,7 +443,6 @@ function animate() {
       const skyFrac = (1.0 - cosVal) * 0.5;
       shadowFrac = 1.0 - skyFrac;
     }
-    const dilation = 1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR));
 
     telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
     telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
@@ -453,7 +459,7 @@ function animate() {
 
   // Subtle cinematic idle drift when not actively navigating
   if (!controls.isInteracting && !controls.isResetting) {
-    const driftAngle = elapsedTime * 0.025;
+    const driftAngle = simTime * 0.025;
     camera.position.y += Math.sin(driftAngle) * 0.0006;
     controls.targetYaw += delta * 0.003;
   }
@@ -465,7 +471,7 @@ function animate() {
   blackHoleMesh.position.copy(camera.position);
 
   // Update uniforms
-  blackHoleMaterial.uniforms.uTime.value = elapsedTime;
+  blackHoleMaterial.uniforms.uTime.value = simTime;
   blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
 
   // Render with post-processing
