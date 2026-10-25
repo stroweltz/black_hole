@@ -24,7 +24,7 @@ An interactive, physically-inspired WebGL2 / Three.js raytracer simulating gravi
 
 - **Raytracer Mathematics & Numerical Integration**: Otto Seiskari's WebGL Black Hole Raytracer ([GitHub: oseiskar/black-hole](https://github.com/oseiskar/black-hole)). Preserved for technical and mathematical reference in [`references/oseiskar_raytracer.glsl`](references/oseiskar_raytracer.glsl).
 - **Background Skybox & Astronomy**: European Southern Observatory (ESO) / NASA Milky Way celestial panorama.
-- **Sonification & NASA Chandra Data**: NASA/CXC/SAO/K.Arcand, SYSTEM Sounds (M. Russo, A. Santaguida). Chandra Media Use Policy: [https://chandra.si.edu/about/copyright.html](https://chandra.si.edu/about/copyright.html).
+- **Sonification & NASA Chandra Data**: NASA/CXC/SAO/K.Arcand, SYSTEM Sounds (M. Russo, A. Santaguida). Acoustic pressure waves in hot intracluster gas discovered by the Chandra X-ray Observatory in the Perseus cluster (57 octaves below middle C) transposed into audible range: [https://chandra.si.edu/photo/2022/sonify5/](https://chandra.si.edu/photo/2022/sonify5/). Chandra Media Use Policy: [https://chandra.si.edu/about/copyright.html](https://chandra.si.edu/about/copyright.html).
 
 ## Local Development
 

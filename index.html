@@ -120,6 +120,9 @@
           <input id="slider-volume" type="range" min="0" max="100" value="60" step="1" aria-label="Громкость">
           <span id="volume-val">60%</span>
         </div>
+        <button id="btn-audio-info" class="btn btn-icon" title="О звуке и сонификации Chandra" aria-label="О звуке">
+          <span>ⓘ</span>
+        </button>
       </div>
       <input type="file" id="input-audio-file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.aac,.flac" style="display: none;">
 
@@ -156,6 +159,52 @@
       <button id="btn-fullscreen" class="btn btn-util" title="Полноэкранный режим">
         <span class="icon">⛶</span> На весь экран
       </button>
+    </div>
+  </div>
+
+  <!-- Modal: О звуке -->
+  <div id="modal-audio-info" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-icon">🎵</span>
+          <span id="audio-modal-title">О звуке</span>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-audio-lang-toggle" class="btn-lang" title="Switch language / Сменить язык">EN</button>
+          <button id="btn-audio-modal-close" class="btn-close" title="Закрыть (Esc)">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="audio-modal-desc" class="modal-text"></div>
+        <div id="audio-modal-credit" class="modal-credit"></div>
+
+        <!-- Comfort Mode Option (Point 6 & User feedback on nausea/motion sickness) -->
+        <div class="modal-comfort-card">
+          <label class="comfort-toggle-label" for="check-audio-comfort">
+            <input type="checkbox" id="check-audio-comfort" checked>
+            <span class="comfort-custom-check"></span>
+            <span class="comfort-title" id="comfort-label-title">🕊️ Режим комфорта (без укачивания)</span>
+          </label>
+          <div class="comfort-desc" id="comfort-mode-desc">
+            Рекомендуется для наушников: центрирует звуковую волну и отключает асинхронные фазовые слои, предотвращая укачивание и тошноту. Снимите галочку, если хотите включить экстремальный релятивистский доплер.
+          </div>
+        </div>
+
+        <!-- Psychoacoustic Vestibular Warning -->
+        <div class="modal-warning-card">
+          <span class="warning-icon">⚠️</span>
+          <div class="warning-body">
+            <span class="warning-title" id="audio-warning-title">Вестибулярное предупреждение</span>
+            <p class="warning-text" id="audio-warning-text">Сонификация NASA создана из рентгеновских волн скопления Персея и содержит глубокие низкочастотные модуляции (~58 Гц). В наушниках они могут вызывать симптомы морской болезни (кинетоз). При дискомфорте снизьте громкость или используйте режим комфорта.</p>
+          </div>
+        </div>
+
+        <div class="modal-source-badge">
+          <span id="audio-source-status">Текущий источник: Сонификация NASA Perseus</span>
+          <button id="btn-load-custom-audio" class="btn btn-sm">Загрузить свой трек</button>
+        </div>
+      </div>
     </div>
   </div>
 

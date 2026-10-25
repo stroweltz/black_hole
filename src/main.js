@@ -7,7 +7,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
-import { CosmicAudio, DEFAULT_AUDIO_URL } from './audio.js';
+import { CosmicAudio, AUDIO_ATTRIBUTION, DEFAULT_AUDIO_URL } from './audio.js';
 import UTIF from './utils/utif.js';
 
 // --- WebGL Support Check ---
@@ -320,8 +320,130 @@ if (sliderVolume) {
   });
 }
 
-// --- Audio Attribution Placeholder (Implemented in Point 7) ---
-function updateAudioModalUI() {}
+// --- Audio Modal & Attribution UI (Point 7) ---
+const modalAudioInfo = document.getElementById('modal-audio-info');
+const btnAudioInfo = document.getElementById('btn-audio-info');
+const btnAudioModalClose = document.getElementById('btn-audio-modal-close');
+const btnAudioLangToggle = document.getElementById('btn-audio-lang-toggle');
+const audioModalTitle = document.getElementById('audio-modal-title');
+const audioModalDesc = document.getElementById('audio-modal-desc');
+const audioModalCredit = document.getElementById('audio-modal-credit');
+const audioSourceStatus = document.getElementById('audio-source-status');
+const btnLoadCustomAudio = document.getElementById('btn-load-custom-audio');
+const inputAudioFile = document.getElementById('input-audio-file');
+const checkAudioComfort = document.getElementById('check-audio-comfort');
+const comfortLabelTitle = document.getElementById('comfort-label-title');
+const comfortModeDesc = document.getElementById('comfort-mode-desc');
+const audioWarningTitle = document.getElementById('audio-warning-title');
+const audioWarningText = document.getElementById('audio-warning-text');
+
+let currentAudioLang = 'ru';
+
+function updateAudioModalUI() {
+  const mode = cosmicAudio.sourceMode || 'nasa';
+  const data = (AUDIO_ATTRIBUTION[mode] && AUDIO_ATTRIBUTION[mode][currentAudioLang])
+    ? AUDIO_ATTRIBUTION[mode][currentAudioLang]
+    : AUDIO_ATTRIBUTION.nasa[currentAudioLang];
+
+  if (audioModalTitle) audioModalTitle.textContent = data.title;
+  if (audioModalDesc) audioModalDesc.textContent = data.desc;
+  if (audioModalCredit) {
+    audioModalCredit.textContent = data.credit;
+    audioModalCredit.style.display = data.credit ? 'block' : 'none';
+  }
+  if (audioSourceStatus) {
+    if (mode === 'custom' && cosmicAudio.customFileName) {
+      audioSourceStatus.textContent = currentAudioLang === 'ru'
+        ? `Текущий источник: Свой звук (${cosmicAudio.customFileName})`
+        : `Current source: Custom audio (${cosmicAudio.customFileName})`;
+    } else {
+      audioSourceStatus.textContent = data.sourceBadge;
+    }
+  }
+  if (comfortLabelTitle) {
+    comfortLabelTitle.textContent = currentAudioLang === 'ru'
+      ? '🕊️ Режим комфорта (без укачивания)'
+      : '🕊️ Comfort Mode (anti-nausea)';
+  }
+  if (comfortModeDesc) {
+    comfortModeDesc.textContent = currentAudioLang === 'ru'
+      ? 'Рекомендуется для наушников: центрирует звуковую волну и отключает асинхронные фазовые слои, предотвращая укачивание и тошноту. Снимите галочку, если хотите включить экстремальный релятивистский доплер.'
+      : 'Recommended for headphones: centers sound phase and disables asynchronous Doppler layers to eliminate dizziness and nausea. Uncheck to enable extreme relativistic Doppler.';
+  }
+  if (audioWarningTitle) {
+    audioWarningTitle.textContent = currentAudioLang === 'ru'
+      ? 'Вестибулярное предупреждение'
+      : 'Vestibular Sensitivity Warning';
+  }
+  if (audioWarningText) {
+    audioWarningText.textContent = currentAudioLang === 'ru'
+      ? 'Сонификация NASA создана из рентгеновских волн скопления Персея и содержит глубокие низкочастотные модуляции (~58 Гц). В наушниках они могут вызывать симптомы морской болезни (кинетоз). При дискомфорте снизьте громкость или используйте режим комфорта.'
+      : "NASA's sonification is generated from Perseus X-ray waves and contains deep sub-bass modulation (~58 Hz). In headphones, these can trigger motion sickness (vestibular illusion of rotation). Lower the volume or enable Comfort Mode if discomfort occurs.";
+  }
+  if (btnAudioLangToggle) {
+    btnAudioLangToggle.textContent = currentAudioLang === 'ru' ? 'EN' : 'RU';
+  }
+  if (btnLoadCustomAudio) {
+    btnLoadCustomAudio.textContent = currentAudioLang === 'ru' ? 'Загрузить свой трек' : 'Load Custom Track';
+  }
+}
+
+if (checkAudioComfort) {
+  checkAudioComfort.checked = cosmicAudio.comfortMode;
+  checkAudioComfort.addEventListener('change', (e) => {
+    const enabled = e.target.checked;
+    cosmicAudio.setComfortMode(enabled);
+    showToast(
+      enabled 
+        ? '🕊️ Режим комфорта включен (звук центрирован)' 
+        : '🌀 Экстремальный релятивистский доплер включен (может укачивать)', 
+      3500
+    );
+  });
+}
+
+function openAudioModal() {
+  if (!modalAudioInfo) return;
+  updateAudioModalUI();
+  modalAudioInfo.style.display = 'flex';
+  void modalAudioInfo.offsetWidth;
+  modalAudioInfo.classList.add('open');
+}
+
+function closeAudioModal() {
+  if (!modalAudioInfo) return;
+  modalAudioInfo.classList.remove('open');
+  setTimeout(() => {
+    if (!modalAudioInfo.classList.contains('open')) {
+      modalAudioInfo.style.display = 'none';
+    }
+  }, 250);
+}
+
+if (btnAudioInfo) {
+  btnAudioInfo.addEventListener('click', openAudioModal);
+}
+if (btnAudioModalClose) {
+  btnAudioModalClose.addEventListener('click', closeAudioModal);
+}
+if (btnAudioLangToggle) {
+  btnAudioLangToggle.addEventListener('click', () => {
+    currentAudioLang = currentAudioLang === 'ru' ? 'en' : 'ru';
+    updateAudioModalUI();
+  });
+}
+if (modalAudioInfo) {
+  modalAudioInfo.addEventListener('click', (e) => {
+    if (e.target === modalAudioInfo) {
+      closeAudioModal();
+    }
+  });
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && modalAudioInfo && modalAudioInfo.classList.contains('open')) {
+    closeAudioModal();
+  }
+});
 
 cosmicAudio.onSourceChange = () => {
   updateAudioModalUI();
