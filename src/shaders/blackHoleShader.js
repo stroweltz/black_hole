@@ -230,12 +230,49 @@ export const BlackHoleShader = {
         diskCol = mix(diskCol, cRed * 0.8, clamp(-cosTheta * 0.5, 0.0, 0.75));
       }
 
-      float density = (structure + emberSparkle) * radialProfile * verticalFade;
+      // Physical clearing / displacement by Miller's Planet:
+      // The solid planet body clears and displaces accretion plasma within its volume
+      float planetCutout = 1.0;
+      if (uPlanetVisible > 0.5) {
+        float dPlanet = length(pos - uPlanetPos);
+        if (dPlanet < 0.22) return vec4(0.0);
+        planetCutout = smoothstep(0.22, 0.28, dPlanet);
+      }
+
+      float density = (structure + emberSparkle) * radialProfile * verticalFade * planetCutout;
       float alpha = clamp(density * 1.15, 0.0, 1.0);
       
       vec3 emission = diskCol * density * beaming * 1.55 * uBloomGlow;
 
       return vec4(emission, alpha);
+    }
+
+    // --- Procedural Miller's Water Planet Model ---
+    vec3 shadePlanet(vec3 pNorm, vec3 viewSegDir, vec3 planetPos, float time) {
+      vec3 pLocal = pNorm * 11.0;
+      float clouds = smoothstep(0.40, 0.76, fbm3D(pLocal + vec3(time * 0.06, 0.0, 0.0)));
+      float waves = noise3D(pLocal * 4.0);
+
+      vec3 oceanCol = mix(vec3(0.04, 0.18, 0.36), vec3(0.08, 0.30, 0.50), waves * 0.5 + 0.5);
+      vec3 cloudCol = vec3(0.92, 0.94, 0.98);
+      vec3 surfCol = mix(oceanCol, cloudCol, clouds * 0.80);
+
+      // Illuminating light source is the incandescent accretion disk at (0,0,0)
+      vec3 lightDir = normalize(-planetPos);
+      float diff = max(0.0, dot(pNorm, lightDir));
+      float ambient = 0.04;
+      float fresnel = pow(1.0 - max(0.0, dot(pNorm, -viewSegDir)), 3.0);
+
+      // Ocean specular reflection
+      vec3 reflDir = reflect(viewSegDir, pNorm);
+      float spec = pow(max(0.0, dot(reflDir, lightDir)), 22.0) * (1.0 - clouds);
+
+      vec3 pLightCol = vec3(1.25, 1.05, 0.85); // disk sunlight
+      vec3 atmoCol = vec3(0.35, 0.65, 0.95);   // azure atmosphere
+
+      return surfCol * (diff * pLightCol + ambient * vec3(0.2, 0.25, 0.35))
+           + spec * 1.8 * pLightCol
+           + fresnel * 0.65 * atmoCol;
     }
 
     void main() {
@@ -271,7 +308,7 @@ export const BlackHoleShader = {
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Optimized for high performance and seamless whole-space relativistic integration
-      const int MAX_STEPS = 100;
+      const int MAX_STEPS = 110;
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
@@ -289,77 +326,95 @@ export const BlackHoleShader = {
           break;
         }
 
-        // 3. Gravitationally Lensed Miller's Planet (Early distance-culled for maximum performance)
-        if (uPlanetVisible > 0.5 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2 && i > 0) {
-          vec3 seg = rayPos - prevPos;
-          float segLen = length(seg);
-          if (segLen > 1e-5) {
-            vec3 segDir = seg / segLen;
-            vec3 toP = prevPos - uPlanetPos;
-            float pRad = 0.22;
-            float boundR = segLen + pRad + 0.35;
-            if (dot(toP, toP) < boundR * boundR) {
-              float b = dot(toP, segDir);
-              float c = dot(toP, toP) - pRad * pRad;
-              float discr = b * b - c;
-              if (discr >= 0.0) {
-                float tHit = -b - sqrt(discr);
-                if (tHit >= 0.0 && tHit <= segLen) {
-                  vec3 pHitPos = prevPos + segDir * tHit;
-                  vec3 pNorm = normalize(pHitPos - uPlanetPos);
+        // 3. Gravitationally Lensed Miller's Planet & Accretion Disk Segment Intersections
+        vec3 seg = rayPos - prevPos;
+        float segLen = length(seg);
 
-                  // Procedural Miller's Water Planet with Waves & Clouds
-                  vec3 pLocal = pNorm * 11.0;
-                  float clouds = smoothstep(0.40, 0.76, fbm3D(pLocal + vec3(uTime * 0.06, 0.0, 0.0)));
-                  float waves = noise3D(pLocal * 4.0);
+        bool hitPlanetThisStep = false;
+        float tHitPlanet = 1e6;
+        vec3 pHitPos = vec3(0.0);
+        vec3 pNorm = vec3(0.0);
 
-                  vec3 oceanCol = mix(vec3(0.04, 0.18, 0.36), vec3(0.08, 0.30, 0.50), waves * 0.5 + 0.5);
-                  vec3 cloudCol = vec3(0.92, 0.94, 0.98);
-                  vec3 surfCol = mix(oceanCol, cloudCol, clouds * 0.80);
-
-                  // Illuminating light source is the incandescent accretion disk at (0,0,0)
-                  vec3 lightDir = normalize(-uPlanetPos);
-                  float diff = max(0.0, dot(pNorm, lightDir));
-                  float ambient = 0.04;
-                  float fresnel = pow(1.0 - max(0.0, dot(pNorm, -segDir)), 3.0);
-
-                  // Ocean specular reflection
-                  vec3 reflDir = reflect(segDir, pNorm);
-                  float spec = pow(max(0.0, dot(reflDir, lightDir)), 22.0) * (1.0 - clouds);
-
-                  vec3 pLightCol = vec3(1.25, 1.05, 0.85); // disk sunlight
-                  vec3 atmoCol = vec3(0.35, 0.65, 0.95);   // azure atmosphere
-
-                  vec3 finalPlanetCol = surfCol * (diff * pLightCol + ambient * vec3(0.2, 0.25, 0.35))
-                                      + spec * 1.8 * pLightCol
-                                      + fresnel * 0.65 * atmoCol;
-
-                  accumColor += (1.0 - accumAlpha) * finalPlanetCol;
-                  accumAlpha = 1.0;
-                  break;
-                }
+        if (uPlanetVisible > 0.5 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2 && segLen > 1e-5 && i > 0) {
+          vec3 segDir = seg / segLen;
+          vec3 toP = prevPos - uPlanetPos;
+          float pRad = 0.22;
+          float boundR = segLen + pRad + 0.35;
+          if (dot(toP, toP) < boundR * boundR) {
+            float b = dot(toP, segDir);
+            float c = dot(toP, toP) - pRad * pRad;
+            float discr = b * b - c;
+            if (discr >= 0.0) {
+              float sqrtD = sqrt(discr);
+              float t1 = -b - sqrtD;
+              if (c < 0.0) {
+                // Ray penetrated inside planet volume: register immediate surface hit without tunneling
+                tHitPlanet = 0.0;
+                hitPlanetThisStep = true;
+                pHitPos = prevPos;
+                pNorm = normalize(pHitPos - uPlanetPos);
+              } else if (t1 >= 0.0 && t1 <= segLen) {
+                tHitPlanet = t1;
+                hitPlanetThisStep = true;
+                pHitPos = prevPos + segDir * t1;
+                pNorm = normalize(pHitPos - uPlanetPos);
               }
             }
           }
         }
 
-        // 4. Check equatorial plane crossing (y = 0)
-        if (prevPos.y * rayPos.y <= 0.0 && i > 0) {
-          float tCross = prevPos.y / (prevPos.y - rayPos.y + 1e-6);
-          vec3 hitPos = mix(prevPos, rayPos, clamp(tCross, 0.0, 1.0));
-          float hitR2 = dot(hitPos.xz, hitPos.xz);
+        // Equatorial disk plane crossing (y = 0)
+        bool hitDiskThisStep = false;
+        float tHitDisk = 1e6;
+        vec3 hitPosDisk = vec3(0.0);
+
+        if (prevPos.y * rayPos.y <= 0.0 && i > 0 && segLen > 1e-5) {
+          float uCross = clamp(prevPos.y / (prevPos.y - rayPos.y + 1e-6), 0.0, 1.0);
+          tHitDisk = uCross * segLen;
+          hitPosDisk = mix(prevPos, rayPos, uCross);
+          float hitR2 = dot(hitPosDisk.xz, hitPosDisk.xz);
           if (hitR2 >= 6.15 && hitR2 <= 104.04) {
-            vec4 diskSamp = sampleDisk(hitPos, rayDir);
-            
-            if (diskSamp.a > 0.001) {
-              accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
-              accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
-              if (accumAlpha > 0.98) break;
-            }
+            hitDiskThisStep = true;
           }
         }
 
-        // 5. Smooth continuous multi-scale step size:
+        // Strictly depth-sorted evaluation along ray segment:
+        if (hitPlanetThisStep && hitDiskThisStep) {
+          if (tHitPlanet <= tHitDisk) {
+            // Planet is in front of disk crossing: planet fully occludes disk behind it!
+            vec3 pCol = shadePlanet(pNorm, seg / segLen, uPlanetPos, uTime);
+            accumColor += (1.0 - accumAlpha) * pCol;
+            accumAlpha = 1.0;
+            break;
+          } else {
+            // Disk crossing is in front of planet: sample disk first, then planet behind
+            vec4 diskSamp = sampleDisk(hitPosDisk, rayDir);
+            if (diskSamp.a > 0.001) {
+              accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
+              accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
+            }
+            if (accumAlpha > 0.98) break;
+
+            vec3 pCol = shadePlanet(pNorm, seg / segLen, uPlanetPos, uTime);
+            accumColor += (1.0 - accumAlpha) * pCol;
+            accumAlpha = 1.0;
+            break;
+          }
+        } else if (hitPlanetThisStep) {
+          vec3 pCol = shadePlanet(pNorm, seg / segLen, uPlanetPos, uTime);
+          accumColor += (1.0 - accumAlpha) * pCol;
+          accumAlpha = 1.0;
+          break;
+        } else if (hitDiskThisStep) {
+          vec4 diskSamp = sampleDisk(hitPosDisk, rayDir);
+          if (diskSamp.a > 0.001) {
+            accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
+            accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
+            if (accumAlpha > 0.98) break;
+          }
+        }
+
+        // 4. Smooth continuous multi-scale step size:
         // Far away (r > 6.0): flat/weak field, take larger steps to escape quickly.
         // Intermediate (2.0 < r <= 6.0): fine symplectic steps for sharp lensing.
         // Extreme proximity (r <= 2.0): ultra-fine symplectic sub-stepping proportional to distance from horizon!
@@ -370,6 +425,15 @@ export const BlackHoleShader = {
           stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
           stepSize = clamp(0.14 * (r - r_eh) + 0.004, 0.003, 0.12);
+        }
+
+        // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
+        // Prevents tunneling, eliminates mesh-crossing artifacts, and guarantees silky smooth silhouettes
+        if (uPlanetVisible > 0.5) {
+          float dP = length(rayPos - uPlanetPos);
+          if (dP < 0.9) {
+            stepSize = min(stepSize, max(0.035, (dP - 0.20) * 0.42));
+          }
         }
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
