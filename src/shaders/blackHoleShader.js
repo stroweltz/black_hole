@@ -103,6 +103,17 @@ export const BlackHoleShader = {
       return v;
     }
 
+    float fbm3D_fast(vec3 p) {
+      float v = 0.0;
+      float a = 0.52;
+      for (int i = 0; i < 2; i++) {
+        v += a * noise3D(p);
+        p = p * 2.08 + vec3(1.7, 3.2, 2.4);
+        a *= 0.5;
+      }
+      return v;
+    }
+
     // --- Photographic Deep Space Skybox (Milky Way + Pinpoint Stars) ---
     vec3 getSkybox(vec3 dir) {
       // Rotate celestial sphere coordinates so the Milky Way band crosses gracefully
@@ -152,7 +163,7 @@ export const BlackHoleShader = {
 
       // Soft, organic plasma flow & sheared filaments (NO artificial vinyl record grooves)
       float turbulence1 = fbm3D(vec3(rotPos * 0.65, r * 0.35 + uTime * 0.04));
-      float turbulence2 = fbm3D(vec3(rotPos * 1.85, r * 0.95 - uTime * 0.06));
+      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.85, r * 0.95 - uTime * 0.06));
       float plasmaNoise = turbulence1 * 0.65 + turbulence2 * 0.35;
 
       // Broad, gentle natural density waves across the disk
@@ -171,11 +182,12 @@ export const BlackHoleShader = {
         vec2 emberGrid = rotPos * 8.5;
         vec2 cell = floor(emberGrid);
         float h = hash(cell);
-        float isMote = step(0.92, h); // fine, delicate specks of stardust
-        vec2 delta = fract(emberGrid) - 0.5;
-        float dist = length(delta);
-        float twinkle = 0.65 + 0.35 * sin(uTime * 6.5 + h * 38.0);
-        emberSparkle = isMote * exp(-dist * dist * 36.0) * twinkle * 1.35;
+        if (h > 0.92) {
+          vec2 delta = fract(emberGrid) - 0.5;
+          float distSq = dot(delta, delta);
+          float twinkle = 0.65 + 0.35 * sin(uTime * 6.5 + h * 38.0);
+          emberSparkle = exp(-distSq * 36.0) * twinkle * 1.35;
+        }
       }
 
       // Radial density profile
@@ -252,9 +264,8 @@ export const BlackHoleShader = {
       bool hitHorizon = false;
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
-      // Seamless whole-space integration: NO artificial bounding sphere discontinuities!
-      const int MAX_STEPS = 144;
-      float exitDist = max(camDist + 2.0, 24.0);
+      // Optimized for high performance and seamless whole-space relativistic integration
+      const int MAX_STEPS = 100;
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
@@ -267,8 +278,8 @@ export const BlackHoleShader = {
           break;
         }
 
-        // 2. Seamless exit: when ray is beyond outer disk and heading away into deep space
-        if (r > exitDist && dot(rayPos, rayDir) > 0.0) {
+        // 2. Seamless exit: ray is beyond outer disk (r_out = 10.2) and escaping into asymptotically flat space
+        if (r > 13.0 && dot(rayPos, rayDir) > 0.0) {
           break;
         }
 
@@ -276,18 +287,20 @@ export const BlackHoleShader = {
         if (prevPos.y * rayPos.y <= 0.0 && i > 0) {
           float tCross = prevPos.y / (prevPos.y - rayPos.y + 1e-6);
           vec3 hitPos = mix(prevPos, rayPos, clamp(tCross, 0.0, 1.0));
-          vec4 diskSamp = sampleDisk(hitPos, rayDir);
-          
-          if (diskSamp.a > 0.001) {
-            accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
-            accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
-            if (accumAlpha > 0.98) break;
+          float hitR2 = dot(hitPos.xz, hitPos.xz);
+          if (hitR2 >= 6.15 && hitR2 <= 104.04) {
+            vec4 diskSamp = sampleDisk(hitPos, rayDir);
+            
+            if (diskSamp.a > 0.001) {
+              accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
+              accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
+              if (accumAlpha > 0.98) break;
+            }
           }
         }
 
-        // 4. Gravitationally Lensed Miller's Planet
-        // Evaluated along every curved geodesic segment in Schwarzschild spacetime!
-        if (uPlanetVisible > 0.5 && i > 0) {
+        // 4. Gravitationally Lensed Miller's Planet (Early distance-culled for maximum performance)
+        if (uPlanetVisible > 0.5 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2 && i > 0) {
           vec3 seg = rayPos - prevPos;
           float segLen = length(seg);
           if (segLen > 1e-5) {
@@ -341,14 +354,14 @@ export const BlackHoleShader = {
         }
 
         // 5. Smooth continuous multi-scale step size:
-        // Far away (r > 10): takes larger steps across flat spacetime, conserving steps for lensing.
-        // Intermediate (2.0 < r <= 10): fine symplectic steps for sharp lensing.
+        // Far away (r > 6.0): flat/weak field, take larger steps to escape quickly.
+        // Intermediate (2.0 < r <= 6.0): fine symplectic steps for sharp lensing.
         // Extreme proximity (r <= 2.0): ultra-fine symplectic sub-stepping proportional to distance from horizon!
         float stepSize;
-        if (r > 10.0) {
-          stepSize = 0.45 + 0.085 * (r - 10.0);
+        if (r > 6.0) {
+          stepSize = 0.45 + 0.12 * (r - 6.0);
         } else if (r > 2.0) {
-          stepSize = clamp(0.045 * r + 0.018, 0.035, 0.45);
+          stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
           stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
         }
