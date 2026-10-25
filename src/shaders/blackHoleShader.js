@@ -114,15 +114,16 @@ export const BlackHoleShader = {
       float theta = asin(clamp(skyDir.y, -1.0, 1.0));
       vec2 uv = vec2(phi / TWO_PI + 0.5, theta / PI + 0.5);
 
-      // Soft galaxy nebula
+      // Photographic Deep Space Skybox (Pure authentic astrophotography, no artificial stars)
       vec3 mw = texture2D(uMilkyWay, uv).rgb;
-      vec3 galaxyCol = pow(mw, vec3(1.35)) * uSkyBrightness;
 
-      // Pinpoint, sharp stars
-      vec3 starSamp = texture2D(uStars, uv).rgb;
-      vec3 starCol = starSamp * 1.35;
+      // Contrast +20% (pivot around midpoint)
+      vec3 contrasted = clamp((mw - vec3(0.5)) * 1.20 + vec3(0.5), 0.0, 1.0);
 
-      return galaxyCol + starCol;
+      // Brightness -15%
+      vec3 skyCol = contrasted * (uSkyBrightness * 0.85);
+
+      return skyCol;
     }
 
     // --- Physical Accretion Disk Model with Gravitationally Lensed Dust ---
