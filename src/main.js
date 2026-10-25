@@ -152,19 +152,17 @@ function activatePreset(name) {
   showToast(preset.title);
 
   // Update preset button active states
-  ['ref', 'orbit', 'sphere', 'portal'].forEach(id => {
+  ['orbit', 'sphere', 'portal'].forEach(id => {
     const el = document.getElementById(`btn-view-${id}`);
     if (el) el.classList.toggle('active', id === name);
   });
 }
 
 // --- UI Binding ---
-const btnViewRef = document.getElementById('btn-view-ref');
 const btnViewOrbit = document.getElementById('btn-view-orbit');
 const btnViewSphere = document.getElementById('btn-view-sphere');
 const btnViewPortal = document.getElementById('btn-view-portal');
 
-if (btnViewRef) btnViewRef.addEventListener('click', () => activatePreset('ref'));
 if (btnViewOrbit) btnViewOrbit.addEventListener('click', () => activatePreset('orbit'));
 if (btnViewSphere) btnViewSphere.addEventListener('click', () => activatePreset('sphere'));
 if (btnViewPortal) btnViewPortal.addEventListener('click', () => activatePreset('portal'));
@@ -245,8 +243,8 @@ if (btnAudio) {
     const isPlaying = cosmicAudio.toggle();
     btnAudio.classList.toggle('active', isPlaying);
     btnAudio.innerHTML = isPlaying 
-      ? '<span class="icon">🔊</span> Звук космоса: Вкл' 
-      : '<span class="icon">🔇</span> Звук космоса: Выкл';
+      ? '<span class="icon">🔊</span> Звук: Вкл' 
+      : '<span class="icon">🔇</span> Звук космоса';
   });
 }
 
@@ -294,8 +292,8 @@ function applySkyboxTexture(texture, name) {
   blackHoleMaterial.uniforms.uMilkyWay.value = texture;
   if (btnUploadBg) {
     btnUploadBg.classList.add('active');
-    const label = name.length > 14 ? name.substring(0, 12) + '...' : name;
-    btnUploadBg.innerHTML = `<span>🌌</span> Фон: ${label}`;
+    btnUploadBg.title = `Загружена панорама: ${name}`;
+    btnUploadBg.innerHTML = `<span>🌌</span> Свой фон ✓`;
   }
 }
 

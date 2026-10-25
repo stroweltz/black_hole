@@ -10,9 +10,6 @@
 <body>
   <div id="canvas-container"></div>
 
-  <!-- Toggle UI Button -->
-  <button id="btn-toggle-ui" title="Скрыть/показать панель">👁 Скрыть интерфейс</button>
-
   <!-- Toast Notification -->
   <div id="toast" class="toast"></div>
 
@@ -28,7 +25,6 @@
   <div id="ui-overlay">
     <div class="top-bar">
       <div class="header">
-        <div class="title-badge">Общая теория относительности</div>
         <h1 class="title">ГАРГАНТЮА</h1>
         <p class="subtitle">Сверхмассивная чёрная дыра и гравитационное линзирование</p>
 
@@ -38,70 +34,73 @@
         </div>
       </div>
 
-      <!-- Real-time Relativistic Flight Telemetry -->
-      <div id="telemetry-hud" class="telemetry-hud">
-        <div class="telemetry-header">
-          <span class="telemetry-dot"></span>
-          <span id="telemetry-title">ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)</span>
+      <!-- Top Right: Real-time Relativistic Telemetry & Toggle UI button directly underneath -->
+      <div class="top-right-col">
+        <div id="telemetry-hud" class="telemetry-hud">
+          <div class="telemetry-header">
+            <span class="telemetry-dot"></span>
+            <span id="telemetry-title">ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)</span>
+          </div>
+          <div class="telemetry-grid">
+            <div class="telemetry-item">
+              <span class="telemetry-label">РАССТОЯНИЕ (r)</span>
+              <span id="tel-radius" class="telemetry-value">15.20 <span class="unit">Rs</span></span>
+            </div>
+            <div class="telemetry-item">
+              <span class="telemetry-label">ТЕНЬ НА НЕБЕ</span>
+              <span id="tel-shadow" class="telemetry-value">0.7%</span>
+            </div>
+            <div class="telemetry-item">
+              <span class="telemetry-label">ДИЛАТАЦИЯ ВРЕМЕНИ</span>
+              <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1ч ≈ 1ч)</span></span>
+            </div>
+          </div>
         </div>
-        <div class="telemetry-grid">
-          <div class="telemetry-item">
-            <span class="telemetry-label">РАССТОЯНИЕ (r)</span>
-            <span id="tel-radius" class="telemetry-value">15.20 <span class="unit">Rs</span></span>
-          </div>
-          <div class="telemetry-item">
-            <span class="telemetry-label">ТЕНЬ НА НЕБЕ</span>
-            <span id="tel-shadow" class="telemetry-value">0.7%</span>
-          </div>
-          <div class="telemetry-item">
-            <span class="telemetry-label">ДИЛАТАЦИЯ ВРЕМЕНИ</span>
-            <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1ч ≈ 1ч)</span></span>
-          </div>
-        </div>
+
+        <button id="btn-toggle-ui" class="btn-toggle-ui" title="Скрыть/показать панель управления">
+          <span class="toggle-icon">👁</span>
+          <span class="toggle-text">Скрыть интерфейс</span>
+        </button>
       </div>
     </div>
 
     <div class="controls-panel">
       <!-- Camera Presets -->
-      <button id="btn-view-ref" class="btn active" title="Ракурс из фильма (r = 15.2 Rs)">
-        <span>🎥</span> Из фильма
-      </button>
-
-      <button id="btn-view-orbit" class="btn" title="Орбита планеты Миллер (r = 5.6 Rs)">
+      <button id="btn-view-orbit" class="btn btn-preset" title="Орбита планеты Миллер (r = 5.6 Rs)">
         <span>🪐</span> Миллер
       </button>
 
-      <button id="btn-view-sphere" class="btn" title="Фотонная сфера: тень 50% неба (r = 1.50 Rs)">
+      <button id="btn-view-sphere" class="btn btn-preset" title="Фотонная сфера: тень 50% неба (r = 1.50 Rs)">
         <span>🌀</span> Фотонная сфера
       </button>
 
-      <button id="btn-view-portal" class="btn primary highlight" title="Субфотонная глубина (r = 1.06 Rs): всё внешнее небо умещается в круг на экране!">
+      <button id="btn-view-portal" class="btn btn-preset primary highlight" title="Субфотонная глубина (r = 1.06 Rs): всё внешнее небо умещается в круг на экране!">
         <span>🕳️</span> Окно Вселенной
       </button>
 
       <div class="divider"></div>
 
       <!-- Metric Mode Toggle: Kerr (Interstellar) ↔ Schwarzschild (Static) -->
-      <button id="btn-metric-toggle" class="btn active" title="Переключение метрики: Вращающаяся дыра Керра (Интерстеллар) ↔ Статичная дыра Шварцшильда">
+      <button id="btn-metric-toggle" class="btn btn-metric active" title="Переключение метрики: Вращающаяся дыра Керра (Интерстеллар) ↔ Статичная дыра Шварцшильда">
         <span id="metric-icon">🌀</span> <span id="metric-label">Керр (вращение)</span>
       </button>
 
       <div class="divider"></div>
 
-      <button id="btn-bloom" class="btn active" title="Включить/выключить свечение">
+      <button id="btn-bloom" class="btn btn-fx active" title="Включить/выключить свечение">
         <span>✨</span> Свечение
       </button>
 
-      <button id="btn-particles" class="btn active" title="Включить/выключить гравитационно линзируемые искры пыли">
+      <button id="btn-particles" class="btn btn-fx active" title="Включить/выключить гравитационно линзируемые искры пыли">
         <span>🌪️</span> Искры пыли
       </button>
 
-      <button id="btn-planet" class="btn active" title="Включить/выключить планету">
+      <button id="btn-planet" class="btn btn-fx active" title="Включить/выключить планету">
         <span>🪐</span> Планета
       </button>
 
       <!-- Custom background upload button -->
-      <button id="btn-upload-bg" class="btn" title="Выбрать любую картинку космоса (панораму) с компьютера">
+      <button id="btn-upload-bg" class="btn btn-fx" title="Выбрать любую картинку космоса (панораму) с компьютера">
         <span>🌌</span> Свой фон
       </button>
       <input type="file" id="input-bg-file" accept=".tif,.tiff,.jpg,.jpeg,.png,.webp,.avif,.bmp,image/*" style="display: none;">
@@ -116,11 +115,11 @@
 
       <div class="divider"></div>
 
-      <button id="btn-audio" class="btn" title="Атмосферный космический звук">
+      <button id="btn-audio" class="btn btn-util" title="Атмосферный космический звук">
         <span class="icon">🔇</span> Звук космоса
       </button>
 
-      <button id="btn-fullscreen" class="btn" title="Полноэкранный режим">
+      <button id="btn-fullscreen" class="btn btn-util" title="Полноэкранный режим">
         <span class="icon">⛶</span> На весь экран
       </button>
     </div>
@@ -129,14 +128,18 @@
   <script>
     // Toggle UI visibility logic
     const btnToggleUI = document.getElementById('btn-toggle-ui');
-    const uiOverlay = document.getElementById('ui-overlay');
+    const toggleText = btnToggleUI ? btnToggleUI.querySelector('.toggle-text') : null;
     let uiVisible = true;
 
-    btnToggleUI.addEventListener('click', () => {
-      uiVisible = !uiVisible;
-      uiOverlay.classList.toggle('hidden', !uiVisible);
-      btnToggleUI.textContent = uiVisible ? '👁 Скрыть интерфейс' : '👁 Показать интерфейс';
-    });
+    if (btnToggleUI) {
+      btnToggleUI.addEventListener('click', () => {
+        uiVisible = !uiVisible;
+        document.body.classList.toggle('ui-hidden', !uiVisible);
+        if (toggleText) {
+          toggleText.textContent = uiVisible ? 'Скрыть интерфейс' : 'Показать интерфейс';
+        }
+      });
+    }
   </script>
   <script type="module" src="./src/main.js"></script>
 </body>

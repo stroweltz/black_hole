@@ -38,12 +38,7 @@ html, body {
   flex-direction: column;
   justify-content: space-between;
   padding: 28px 36px;
-  transition: opacity 0.4s ease;
-}
-
-#ui-overlay.hidden {
-  opacity: 0;
-  pointer-events: none;
+  box-sizing: border-box;
 }
 
 /* Top Bar Layout */
@@ -52,28 +47,14 @@ html, body {
   justify-content: space-between;
   align-items: flex-start;
   width: 100%;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* Header */
 .header {
   pointer-events: auto;
-  max-width: 440px;
-}
-
-.title-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: #ff9d42;
-  background: rgba(255, 140, 40, 0.12);
-  border: 1px solid rgba(255, 140, 40, 0.28);
-  padding: 4px 10px;
-  border-radius: 20px;
-  margin-bottom: 8px;
-  backdrop-filter: blur(8px);
+  max-width: 460px;
+  transition: opacity 0.35s ease, transform 0.35s ease;
 }
 
 .title {
@@ -118,21 +99,17 @@ html, body {
   font-weight: 600;
 }
 
-/* Controls Bar at bottom */
-.controls-panel {
+/* Top Right Column: Telemetry HUD + Toggle UI button placed squarely underneath */
+.top-right-col {
   pointer-events: auto;
-  align-self: center;
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  background: rgba(8, 10, 16, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 10px 18px;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 140, 40, 0.08);
-  max-width: 95vw;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 380px;
+  max-width: 90vw;
+  flex-shrink: 0;
+  z-index: 25;
 }
 
 /* Telemetry HUD (Cockpit Relativistic Avionics) */
@@ -144,8 +121,10 @@ html, body {
   padding: 10px 16px;
   backdrop-filter: blur(20px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 140, 40, 0.08);
-  margin-right: 170px;
-  transition: all 0.3s ease;
+  margin-right: 0;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .telemetry-header {
@@ -158,6 +137,7 @@ html, body {
   color: #ffaa44;
   margin-bottom: 8px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .telemetry-dot {
@@ -167,6 +147,7 @@ html, body {
   border-radius: 50%;
   box-shadow: 0 0 8px #22c55e;
   animation: pulse-dot 2s infinite ease-in-out;
+  flex-shrink: 0;
 }
 
 @keyframes pulse-dot {
@@ -175,9 +156,10 @@ html, body {
 }
 
 .telemetry-grid {
-  display: flex;
+  display: grid;
+  grid-template-columns: 88px 78px 1fr;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
 .telemetry-item {
@@ -192,6 +174,7 @@ html, body {
   letter-spacing: 1px;
   text-transform: uppercase;
   color: #94a3b8;
+  white-space: nowrap;
 }
 
 .telemetry-value {
@@ -199,12 +182,106 @@ html, body {
   font-weight: 700;
   color: #f1f5f9;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .telemetry-value .unit {
   font-size: 10px;
   font-weight: 500;
   color: #94a3b8;
+}
+
+/* Toggle UI Button (Positioned squarely under Telemetry HUD) */
+#btn-toggle-ui {
+  position: static;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(10, 14, 22, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+#btn-toggle-ui:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 170, 70, 0.4);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* UI Hidden State */
+body.ui-hidden .header {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
+}
+
+body.ui-hidden .telemetry-hud {
+  opacity: 0;
+  pointer-events: none;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0;
+  border-width: 0;
+  overflow: hidden;
+}
+
+body.ui-hidden .controls-panel {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px);
+}
+
+body.ui-hidden .top-right-col {
+  align-items: flex-end;
+  width: auto;
+}
+
+body.ui-hidden #btn-toggle-ui {
+  width: auto;
+  min-width: 175px;
+  background: rgba(10, 14, 22, 0.85);
+  border-color: rgba(255, 170, 70, 0.4);
+  color: #ffb766;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+/* Controls Bar at bottom */
+.controls-panel {
+  pointer-events: auto;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  background: rgba(8, 10, 16, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 8px 14px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 140, 40, 0.08);
+  max-width: 98vw;
+  overflow-x: auto;
+  scrollbar-width: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  box-sizing: border-box;
+}
+
+.controls-panel::-webkit-scrollbar {
+  display: none;
 }
 
 /* Highlight button (Portal to the Universe) */
@@ -229,12 +306,15 @@ html, body {
   color: #e2e8f0;
   font-size: 13px;
   font-weight: 500;
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-radius: 10px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  white-space: nowrap;
+  box-sizing: border-box;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -242,6 +322,27 @@ html, body {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.25);
   transform: translateY(-1px);
+}
+
+/* Button Standardized Width Tiers (Zero layout shift on toggle) */
+.btn-preset {
+  width: 148px;
+  flex-shrink: 0;
+}
+
+#btn-metric-toggle, .btn-metric {
+  width: 196px;
+  flex-shrink: 0;
+}
+
+.btn-fx {
+  width: 124px;
+  flex-shrink: 0;
+}
+
+.btn-util {
+  width: 142px;
+  flex-shrink: 0;
 }
 
 .btn.primary {
@@ -268,16 +369,18 @@ html, body {
   height: 24px;
   background: rgba(255, 255, 255, 0.12);
   margin: 0 4px;
+  flex-shrink: 0;
 }
 
 /* Slider */
 .slider-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 12px;
   color: #cbd5e1;
-  padding: 0 6px;
+  padding: 0 4px;
+  flex-shrink: 0;
 }
 
 .slider-group label {
@@ -285,40 +388,19 @@ html, body {
 }
 
 .slider-group input[type="range"] {
-  width: 90px;
+  width: 85px;
   height: 4px;
   accent-color: #ff9933;
   cursor: pointer;
 }
 
 #speed-val {
-  min-width: 28px;
+  width: 32px;
   color: #ffaa44;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-}
-
-/* Toggle UI Button (Top Right) */
-#btn-toggle-ui {
-  position: absolute;
-  top: 28px;
-  right: 36px;
-  z-index: 20;
-  pointer-events: auto;
-  background: rgba(8, 10, 16, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-  transition: all 0.2s ease;
-}
-
-#btn-toggle-ui:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 /* Toast Notifications */
