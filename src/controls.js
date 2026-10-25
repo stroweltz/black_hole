@@ -35,6 +35,15 @@ export class SpaceFlightControls {
       boost: false
     };
 
+    // Reusable pooled vectors to eliminate per-frame GC allocations and stutter
+    this._forward = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._moveDir = new THREE.Vector3();
+    this._radial = new THREE.Vector3();
+    this._pinchForward = new THREE.Vector3();
+    this._wheelForward = new THREE.Vector3();
+
     // Pointer drag & touch configuration
     this.isDragging = false;
     this.prevMouse = { x: 0, y: 0 };
@@ -76,10 +85,9 @@ export class SpaceFlightControls {
   }
 
   initOrientation() {
-    const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
-    this.pitch = Math.asin(Math.max(-0.999, Math.min(0.999, dir.y)));
-    this.yaw = Math.atan2(-dir.x, -dir.z);
+    this.camera.getWorldDirection(this._forward);
+    this.pitch = Math.asin(Math.max(-0.999, Math.min(0.999, this._forward.y)));
+    this.yaw = Math.atan2(-this._forward.x, -this._forward.z);
     this.targetPitch = this.pitch;
     this.targetYaw = this.yaw;
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
@@ -135,11 +143,10 @@ export class SpaceFlightControls {
         this.prevPinchDist = currDist;
 
         if (Math.abs(distDiff) > 1) {
-          const forward = new THREE.Vector3();
-          this.camera.getWorldDirection(forward);
+          this.camera.getWorldDirection(this._pinchForward);
           const r = this.camera.position.length();
           const pinchImpulse = (distDiff * 0.005) * Math.max(0.075, r * 0.022);
-          this.velocity.addScaledVector(forward, pinchImpulse);
+          this.velocity.addScaledVector(this._pinchForward, pinchImpulse);
           this.setInteracting();
         }
       }
@@ -170,12 +177,11 @@ export class SpaceFlightControls {
       this.setInteracting();
       if (this.isResetting) this.isResetting = false;
 
-      const forward = new THREE.Vector3();
-      this.camera.getWorldDirection(forward);
+      this.camera.getWorldDirection(this._wheelForward);
       const r = this.camera.position.length();
-      // Impulse reduced 8x total for ultra-smooth and precise thruster adjustment
+      // Impulse reduced for ultra-smooth and precise thruster adjustment
       const impulse = -Math.sign(e.deltaY) * Math.max(0.075, r * 0.022);
-      this.velocity.addScaledVector(forward, impulse);
+      this.velocity.addScaledVector(this._wheelForward, impulse);
     }, { passive: false });
 
     // Prevent context menu on right click
@@ -293,19 +299,17 @@ export class SpaceFlightControls {
     this.pitch += (this.targetPitch - this.pitch) * dampFactor;
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
 
-    // Direction vectors in world space
-    const forward = new THREE.Vector3();
-    this.camera.getWorldDirection(forward);
-    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
-    const up = new THREE.Vector3(0, 1, 0);
+    // Direction vectors in world space (reusing pooled vectors to eliminate GC pauses)
+    this.camera.getWorldDirection(this._forward);
+    this._right.crossVectors(this._forward, this.camera.up).normalize();
 
-    const moveDir = new THREE.Vector3();
-    if (this.keys.forward) moveDir.add(forward);
-    if (this.keys.backward) moveDir.sub(forward);
-    if (this.keys.right) moveDir.add(right);
-    if (this.keys.left) moveDir.sub(right);
-    if (this.keys.up) moveDir.add(up);
-    if (this.keys.down) moveDir.sub(up);
+    this._moveDir.set(0, 0, 0);
+    if (this.keys.forward) this._moveDir.add(this._forward);
+    if (this.keys.backward) this._moveDir.sub(this._forward);
+    if (this.keys.right) this._moveDir.add(this._right);
+    if (this.keys.left) this._moveDir.sub(this._right);
+    if (this.keys.up) this._moveDir.add(this._up);
+    if (this.keys.down) this._moveDir.sub(this._up);
 
     const r = this.camera.position.length();
 
@@ -315,10 +319,10 @@ export class SpaceFlightControls {
     let baseSpeed = Math.max(0.010, Math.min(0.92, (proximity * 0.22 + 0.012)));
     if (this.keys.boost) baseSpeed *= 2.8;
 
-    if (moveDir.lengthSq() > 0.0001) {
-      moveDir.normalize();
+    if (this._moveDir.lengthSq() > 0.0001) {
+      this._moveDir.normalize();
       const accel = baseSpeed * 5.2;
-      this.velocity.addScaledVector(moveDir, accel * delta);
+      this.velocity.addScaledVector(this._moveDir, accel * delta);
     }
 
     // Vacuum damping (spacecraft flight-assist thrusters)
@@ -332,10 +336,10 @@ export class SpaceFlightControls {
     const dist = this.camera.position.length();
     if (dist < this.minRadius) {
       this.camera.position.setLength(this.minRadius);
-      const radial = this.camera.position.clone().normalize();
-      const vDot = this.velocity.dot(radial);
+      this._radial.copy(this.camera.position).normalize();
+      const vDot = this.velocity.dot(this._radial);
       if (vDot < 0) {
-        this.velocity.sub(radial.multiplyScalar(vDot));
+        this.velocity.addScaledVector(this._radial, -vDot);
       }
     } else if (dist > this.maxRadius) {
       this.camera.position.setLength(this.maxRadius);

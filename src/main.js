@@ -9,7 +9,7 @@ import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
 import { CosmicAudio, AUDIO_ATTRIBUTION, DEFAULT_AUDIO_URL } from './audio.js';
 import { TRANSLATIONS, getInitialLanguage, saveLanguage } from './i18n.js';
-import UTIF from './utils/utif.js';
+// UTIF dynamically loaded on demand for custom TIFF panoramas
 
 // --- Current Language State ---
 let currentLang = getInitialLanguage();
@@ -570,7 +570,10 @@ async function handleSkyboxFile(file) {
     try {
       const mbSize = (file.size / (1024 * 1024)).toFixed(1);
       showToast(t.toastTiffDecoding(mbSize), 6000);
-      const buffer = await file.arrayBuffer();
+      const [buffer, { default: UTIF }] = await Promise.all([
+        file.arrayBuffer(),
+        import('./utils/utif.js')
+      ]);
       const ifds = UTIF.decode(buffer);
       if (!ifds || !ifds.length) {
         throw new Error(t.toastTiffIfdError);
@@ -839,6 +842,13 @@ setAppLanguage(currentLang);
 const clock = new THREE.Clock();
 let simTime = 0.0;
 const camWorldDir = new THREE.Vector3();
+const IDLE_ROTATION_AXIS = new THREE.Vector3(0, 1, 0);
+
+// Cached strings and frame throttling for telemetry HUD to avoid DOM layout thrashing
+let lastTelRadiusStr = '';
+let lastTelShadowStr = '';
+let lastTelDilationStr = '';
+let hudFrameCount = 0;
 
 /**
  * Format Kerr relativistic time dilation with iconic Interstellar time scale (1 hr = X years / days / hours)
@@ -933,15 +943,29 @@ function animate() {
   // Pure physical Schwarzschild gamma dilation for audio (independent of HUD metric mode)
   const physicalGamma = 1.0 / Math.sqrt(Math.max(0.0001, 1.0 - 1.0 / Math.max(camR, 1.002)));
 
-  // Real-time Relativistic Telemetry HUD update
-  if (telRadius) {
-    telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
-  }
-  if (telShadow) {
-    telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
-  }
-  if (telDilation) {
-    telDilation.innerHTML = dilationHTML;
+  // Real-time Relativistic Telemetry HUD update (throttled to ~15-20 Hz with string diffing)
+  hudFrameCount++;
+  if (hudFrameCount % 4 === 0) {
+    if (telRadius) {
+      const newRadiusStr = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
+      if (newRadiusStr !== lastTelRadiusStr) {
+        telRadius.innerHTML = newRadiusStr;
+        lastTelRadiusStr = newRadiusStr;
+      }
+    }
+    if (telShadow) {
+      const newShadowStr = `${(shadowFrac * 100).toFixed(1)}%`;
+      if (newShadowStr !== lastTelShadowStr) {
+        telShadow.textContent = newShadowStr;
+        lastTelShadowStr = newShadowStr;
+      }
+    }
+    if (telDilation) {
+      if (dilationHTML !== lastTelDilationStr) {
+        telDilation.innerHTML = dilationHTML;
+        lastTelDilationStr = dilationHTML;
+      }
+    }
   }
 
   // Update real-time audio with observer state
@@ -951,7 +975,7 @@ function animate() {
   // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
   if (!controls.isDragging && !controls.isInteracting && !controls.isResetting) {
     const idleAngle = delta * 0.015;
-    camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), idleAngle);
+    camera.position.applyAxisAngle(IDLE_ROTATION_AXIS, idleAngle);
     camera.lookAt(0, 0, 0);
     if (camera.position.length() < controls.minRadius) {
       camera.position.setLength(controls.minRadius);
