@@ -143,7 +143,7 @@ export const BlackHoleShader = {
 
     // --- Physical Accretion Disk Model with Gravitationally Lensed Dust ---
     const float rs = 1.0;            // Schwarzschild radius
-    const float r_eh = 1.015;        // Event Horizon cutoff
+    const float r_eh = 1.002;        // Event Horizon cutoff (positioned safely inside minRadius = 1.015)
     const float r_in = 2.48;         // Inner disk edge
     const float r_out = 10.2;        // Outer disk edge
 
@@ -363,7 +363,7 @@ export const BlackHoleShader = {
         } else if (r > 2.0) {
           stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
-          stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
+          stepSize = clamp(0.14 * (r - r_eh) + 0.004, 0.003, 0.12);
         }
 
         // Symplectic 2nd-Order Leapfrog Geodesic step

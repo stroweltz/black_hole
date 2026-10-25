@@ -161,11 +161,11 @@ const PRESETS = {
     title: '🌀 Фотонная сфера (r = 1.50 Rs, тень 50% неба)'
   },
   portal: {
-    // Sub-photon sphere: looking radially outward into deep space
+    // Razor-edge event horizon skim: looking radially outward into deep space
     // Relativistic tetrad transformation gathers the entire universe into a sharp circular porthole!
-    pos: new THREE.Vector3(0.0, 0.32, 1.02),
-    target: new THREE.Vector3(0.0, 3.2, 10.2),
-    title: '🕳️ Окно Вселенной (r = 1.07 Rs, тень 89% неба)'
+    pos: new THREE.Vector3(0.0, 0.06, 1.014),
+    target: new THREE.Vector3(0.0, 2.5, 12.0),
+    title: '🕳️ Край горизонта (r = 1.015 Rs, тень 97.5% неба)'
   }
 };
 
@@ -511,13 +511,13 @@ function animate() {
     dilationHTML = formatKerrDilation(kerrDilation);
 
     // Relativistic orbital speed of external Miller's planet as seen by the observer:
-    // When the observer dives below Miller (r < 5.6) towards the event horizon (r -> 1.06),
+    // When the observer dives below Miller (r < 5.6) towards the event horizon (r -> 1.015),
     // observer's local time slows to a crawl, so external Miller's planet visibly rushes across the sky (~2s per full orbit)!
     if (camR >= 5.6) {
       orbitMultiplier = 1.0;
       visualTimeMultiplier = 1.0;
     } else {
-      const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - 1.06)));
+      const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - controls.minRadius)));
       orbitMultiplier = 1.0 + Math.pow(depth, 1.7) * 44.0;
       visualTimeMultiplier = 1.0 + Math.pow(depth, 1.7) * 2.8;
     }
@@ -575,6 +575,9 @@ function animate() {
     const driftAngle = simTime * 0.025;
     camera.position.y += Math.sin(driftAngle) * 0.0006;
     controls.targetYaw += delta * 0.003;
+    if (camera.position.length() < controls.minRadius) {
+      camera.position.setLength(controls.minRadius);
+    }
   }
 
   // Update dynamic audio redshift/distance modulation

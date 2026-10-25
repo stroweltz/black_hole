@@ -117,8 +117,8 @@ export class CosmicAudio {
   update(cameraDistance) {
     if (!this.isPlaying || !this.ctx || !this.filter) return;
 
-    // Normalized factor: 0.0 near horizon (r=1.06), 1.0 far out (r=25)
-    const factor = Math.min(Math.max((cameraDistance - 1.06) / 24.0, 0.0), 1.0);
+    // Normalized factor: 0.0 near horizon (r=1.015), 1.0 far out (r=25)
+    const factor = Math.min(Math.max((cameraDistance - 1.015) / 24.0, 0.0), 1.0);
 
     const now = this.ctx.currentTime;
     // Gravitational redshift drops the cutoff and sub frequency near the horizon
