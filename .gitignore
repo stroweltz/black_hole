@@ -4,5 +4,9 @@ dist/
 *.tif
 *.tiff
 2026-*.png
+78ad4686-*.jpg
+Black Hole*
+Physics of*
+.agents/
 .DS_Store
 Thumbs.db
