@@ -293,22 +293,19 @@ export const BlackHoleShader = {
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
 
-      // Conserved Relativistic Angular Momentum / Impact Parameter b^2 = L^2 / E^2
-      // In the Schwarzschild metric for a stationary observer:
-      // b^2 = (camDist^2 * sin^2(psi)) / (1.0 - rs / camDist)
-      // where sin^2(psi) = dot(perpComp, perpComp).
-      float sinPsi2 = dot(perpComp, perpComp);
-      float metricDenom = max(1.0 - rs / camDist, 0.001);
-      float b2 = clamp((camDist * camDist * sinPsi2) / metricDenom, 0.0, 500.0);
+      // Conserved Relativistic Angular Momentum h^2 = |r x v|^2 for geodesic integration
+      vec3 hv = cross(rayPos, rayDir);
+      float h2 = dot(hv, hv);
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
       float minRadius = 1e6;
       bool hitHorizon = false;
+      bool escaped = false;
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Optimized for high performance and seamless whole-space relativistic integration
-      const int MAX_STEPS = 110;
+      const int MAX_STEPS = 128;
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
@@ -323,6 +320,7 @@ export const BlackHoleShader = {
 
         // 2. Seamless exit: ray is beyond outer disk (r_out = 10.2) and escaping into asymptotically flat space
         if (r > 13.0 && dot(rayPos, rayDir) > 0.0) {
+          escaped = true;
           break;
         }
 
@@ -388,7 +386,7 @@ export const BlackHoleShader = {
             break;
           } else {
             // Disk crossing is in front of planet: sample disk first, then planet behind
-            vec4 diskSamp = sampleDisk(hitPosDisk, rayDir);
+            vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir));
             if (diskSamp.a > 0.001) {
               accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
               accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
@@ -406,7 +404,7 @@ export const BlackHoleShader = {
           accumAlpha = 1.0;
           break;
         } else if (hitDiskThisStep) {
-          vec4 diskSamp = sampleDisk(hitPosDisk, rayDir);
+          vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir));
           if (diskSamp.a > 0.001) {
             accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
             accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
@@ -424,7 +422,7 @@ export const BlackHoleShader = {
         } else if (r > 2.0) {
           stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
-          stepSize = clamp(0.14 * (r - r_eh) + 0.004, 0.003, 0.12);
+          stepSize = clamp(0.28 * (r - r_eh) + 0.004, 0.003, 0.16);
         }
 
         // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
@@ -437,19 +435,22 @@ export const BlackHoleShader = {
         }
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
-        // dV/dlambda = - 1.5 * rs * (b^2 / r^5) * pos
+        // Conserves angular momentum h^2 = |r x v|^2 exactly without artificial renormalization
         vec3 halfPos = rayPos + rayDir * (stepSize * 0.5);
-        float halfR = length(halfPos);
-        vec3 accel = - 1.5 * rs * (b2 / (pow(halfR, 5.0) + 1e-5)) * halfPos;
+        float inv = inversesqrt(dot(halfPos, halfPos));
+        float inv5 = inv * inv * inv * inv * inv;
+        vec3 accel = - 1.5 * rs * h2 * inv5 * halfPos;
 
-        rayDir = normalize(rayDir + accel * stepSize);
+        rayDir += accel * stepSize;
         prevPos = rayPos;
         rayPos = halfPos + rayDir * (stepSize * 0.5);
       }
 
       // Gravitationally lensed deep space skybox
-      if (!hitHorizon && accumAlpha < 1.0) {
-        vec3 sky = getSkybox(rayDir);
+      // Only rays that successfully escaped past r > 13 sample the celestial sphere.
+      // Rays trapped near the horizon or photon sphere that exhaust MAX_STEPS are treated as captured (black void).
+      if (!hitHorizon && escaped && accumAlpha < 1.0) {
+        vec3 sky = getSkybox(normalize(rayDir));
         accumColor += (1.0 - accumAlpha) * sky;
       }
 
