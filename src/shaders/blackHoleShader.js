@@ -323,6 +323,17 @@ export const BlackHoleShader = {
       vec3 hv = cross(rayPos, rayDir);
       float h2 = dot(hv, hv);
 
+      // Geodesic Plane Pre-Culling for Miller's Planet
+      // In Schwarzschild spacetime, every photon geodesic lies in a fixed central plane with normal hv = r x v.
+      // The perpendicular distance from the planet center to the ray's orbital plane is abs(dot(uPlanetPos, hv)) / |hv|.
+      // If this distance exceeds the planet bounding influence radius (1.05, ~5x planet radius 0.22),
+      // the ray can mathematically NEVER intersect or approach the planet.
+      bool canHitPlanet = false;
+      if (uPlanetVisible > 0.5 && h2 > 1e-6) {
+        float distToPlanetPlane = abs(dot(uPlanetPos, hv)) * inversesqrt(h2);
+        canHitPlanet = (distToPlanetPlane < 1.05);
+      }
+
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
       bool hitHorizon = false;
@@ -355,7 +366,7 @@ export const BlackHoleShader = {
         vec3 pViewDir = rayDir;
         float segLen = 0.0;
 
-        if (uPlanetVisible > 0.5 && i > 0 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
+        if (canHitPlanet && i > 0 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
           vec3 toP = prevPos - uPlanetPos;
           float toP2 = dot(toP, toP);
           if (toP2 < 2.0) {
@@ -460,7 +471,7 @@ export const BlackHoleShader = {
 
         // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
         // Prevents tunneling, eliminates mesh-crossing artifacts, and guarantees silky smooth silhouettes
-        if (uPlanetVisible > 0.5) {
+        if (canHitPlanet) {
           vec3 toPlanet = rayPos - uPlanetPos;
           float dP2 = dot(toPlanet, toPlanet);
           if (dP2 < 0.81) {
