@@ -258,6 +258,14 @@ export const BlackHoleShader = {
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
 
+      // Conserved Relativistic Angular Momentum / Impact Parameter b^2 = L^2 / E^2
+      // In the Schwarzschild metric for a stationary observer:
+      // b^2 = (camDist^2 * sin^2(psi)) / (1.0 - rs / camDist)
+      // where sin^2(psi) = dot(perpComp, perpComp).
+      float sinPsi2 = dot(perpComp, perpComp);
+      float metricDenom = max(1.0 - rs / camDist, 0.001);
+      float b2 = clamp((camDist * camDist * sinPsi2) / metricDenom, 0.0, 500.0);
+
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
       float minRadius = 1e6;
@@ -283,23 +291,7 @@ export const BlackHoleShader = {
           break;
         }
 
-        // 3. Check equatorial plane crossing (y = 0)
-        if (prevPos.y * rayPos.y <= 0.0 && i > 0) {
-          float tCross = prevPos.y / (prevPos.y - rayPos.y + 1e-6);
-          vec3 hitPos = mix(prevPos, rayPos, clamp(tCross, 0.0, 1.0));
-          float hitR2 = dot(hitPos.xz, hitPos.xz);
-          if (hitR2 >= 6.15 && hitR2 <= 104.04) {
-            vec4 diskSamp = sampleDisk(hitPos, rayDir);
-            
-            if (diskSamp.a > 0.001) {
-              accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
-              accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
-              if (accumAlpha > 0.98) break;
-            }
-          }
-        }
-
-        // 4. Gravitationally Lensed Miller's Planet (Early distance-culled for maximum performance)
+        // 3. Gravitationally Lensed Miller's Planet (Early distance-culled for maximum performance)
         if (uPlanetVisible > 0.5 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2 && i > 0) {
           vec3 seg = rayPos - prevPos;
           float segLen = length(seg);
@@ -353,6 +345,22 @@ export const BlackHoleShader = {
           }
         }
 
+        // 4. Check equatorial plane crossing (y = 0)
+        if (prevPos.y * rayPos.y <= 0.0 && i > 0) {
+          float tCross = prevPos.y / (prevPos.y - rayPos.y + 1e-6);
+          vec3 hitPos = mix(prevPos, rayPos, clamp(tCross, 0.0, 1.0));
+          float hitR2 = dot(hitPos.xz, hitPos.xz);
+          if (hitR2 >= 6.15 && hitR2 <= 104.04) {
+            vec4 diskSamp = sampleDisk(hitPos, rayDir);
+            
+            if (diskSamp.a > 0.001) {
+              accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
+              accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
+              if (accumAlpha > 0.98) break;
+            }
+          }
+        }
+
         // 5. Smooth continuous multi-scale step size:
         // Far away (r > 6.0): flat/weak field, take larger steps to escape quickly.
         // Intermediate (2.0 < r <= 6.0): fine symplectic steps for sharp lensing.
@@ -367,12 +375,10 @@ export const BlackHoleShader = {
         }
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
-        // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
+        // dV/dlambda = - 1.5 * rs * (b^2 / r^5) * pos
         vec3 halfPos = rayPos + rayDir * (stepSize * 0.5);
         float halfR = length(halfPos);
-        vec3 hVec = cross(halfPos, rayDir);
-        float h2 = dot(hVec, hVec);
-        vec3 accel = - 1.5 * rs * (h2 / (pow(halfR, 5.0) + 1e-5)) * halfPos;
+        vec3 accel = - 1.5 * rs * (b2 / (pow(halfR, 5.0) + 1e-5)) * halfPos;
 
         rayDir = normalize(rayDir + accel * stepSize);
         prevPos = rayPos;
