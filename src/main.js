@@ -9,6 +9,23 @@ import { BlackHoleShader } from './shaders/blackHoleShader.js';
 import { CosmicAudio } from './audio.js';
 import UTIF from './utils/utif.js';
 
+// --- WebGL Support Check ---
+function isWebGLAvailable() {
+  try {
+    const testCanvas = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (testCanvas.getContext('webgl2') || testCanvas.getContext('webgl')));
+  } catch (e) {
+    return false;
+  }
+}
+
+if (!isWebGLAvailable()) {
+  const errDiv = document.createElement('div');
+  errDiv.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#05070d;color:#f87171;font-family:sans-serif;padding:24px;text-align:center;z-index:99999;';
+  errDiv.innerHTML = '<h2 style="margin-bottom:12px;color:#f1f5f9;">⚫ Требуется поддержка WebGL</h2><p style="color:#94a3b8;max-width:480px;line-height:1.5;">Ваш браузер или видеокарта в данный момент не поддерживает WebGL. Пожалуйста, включите аппаратное ускорение в настройках браузера или обновите драйвер видеокарты.</p>';
+  document.body.appendChild(errDiv);
+}
+
 // --- Renderer Setup ---
 const canvasContainer = document.getElementById('canvas-container');
 // Disable redundant default framebuffer MSAA since EffectComposer renders to offscreen targets
@@ -265,12 +282,24 @@ if (sliderSpeed) {
 
 if (btnFullscreen) {
   btnFullscreen.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      btnFullscreen.innerHTML = '<span class="icon">⛶</span> Свернуть';
+    const doc = document;
+    const docEl = doc.documentElement;
+    const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement;
+
+    if (!isFs) {
+      const enterFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen;
+      if (enterFs) {
+        enterFs.call(docEl).catch(() => {});
+        btnFullscreen.innerHTML = '<span class="icon">⛶</span> Свернуть';
+      } else {
+        showToast('Полноэкранный режим не поддерживается на этом устройстве (iOS Safari)');
+      }
     } else {
-      document.exitFullscreen().catch(() => {});
-      btnFullscreen.innerHTML = '<span class="icon">⛶</span> На весь экран';
+      const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen;
+      if (exitFs) {
+        exitFs.call(doc).catch(() => {});
+        btnFullscreen.innerHTML = '<span class="icon">⛶</span> На весь экран';
+      }
     }
   });
 }
