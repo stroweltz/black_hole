@@ -496,3 +496,124 @@ body.ui-hidden #btn-toggle-ui {
     padding: 6px 10px;
   }
 }
+
+/* --- Cinematic Preloader (hides shader precompilation & initial warmup) --- */
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #020204;
+  overflow: hidden;
+  transition: opacity 0.85s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.85s ease;
+}
+
+.preloader.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.preloader-bg {
+  position: absolute;
+  inset: -60px; /* Bleed for heavy blur */
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(36px) brightness(0.55) contrast(1.15);
+  transform: scale(1.15);
+  will-change: transform, opacity;
+}
+
+.preloader-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(3, 4, 8, 0.40) 0%, rgba(2, 2, 4, 0.85) 75%, #020204 100%);
+}
+
+.preloader-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+  max-width: 440px;
+}
+
+.preloader-spinner-container {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 22px;
+}
+
+.preloader-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: #f59e0b;
+  border-right-color: #fbbf24;
+  border-bottom-color: rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.45), inset 0 0 16px rgba(245, 158, 11, 0.25);
+  animation: preloader-spin 1.4s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+}
+
+.preloader-hole {
+  position: absolute;
+  inset: 12px;
+  background: #020204;
+  border-radius: 50%;
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes preloader-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.preloader-title {
+  font-family: 'Cinzel', serif;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #ffffff;
+  text-shadow: 0 0 24px rgba(251, 191, 36, 0.55);
+  margin-bottom: 8px;
+}
+
+.preloader-status {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+  margin-bottom: 22px;
+}
+
+.preloader-bar {
+  width: 170px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.preloader-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b);
+  border-radius: 3px;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.85);
+  animation: preloader-bar-anim 1.6s ease-in-out infinite;
+}
+
+@keyframes preloader-bar-anim {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}

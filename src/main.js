@@ -592,7 +592,29 @@ function animate() {
 
   // Render with post-processing
   composer.render();
+
+  // Dismiss preloader smoothly once the first 2 frames are cleanly presented on the canvas
+  if (renderedFrames <= 2) {
+    renderedFrames++;
+    if (renderedFrames >= 2) {
+      requestAnimationFrame(hidePreloader);
+    }
+  }
 }
+
+// --- Preloader Dismissal & Safety Timeout ---
+let renderedFrames = 0;
+function hidePreloader() {
+  const preloader = document.getElementById('preloader');
+  if (!preloader || preloader.classList.contains('fade-out')) return;
+  preloader.classList.add('fade-out');
+  setTimeout(() => {
+    if (preloader.parentNode) preloader.parentNode.removeChild(preloader);
+  }, 950);
+}
+
+// Fallback safety timeout ensures preloader never gets stuck if tab was initially in background
+setTimeout(hidePreloader, 4000);
 
 // --- Shader Precompilation & GPU Warmup ---
 // Precompile all shaders and render 1 warm-up frame before animation starts to eliminate runtime stutter
