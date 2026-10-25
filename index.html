@@ -13,6 +13,17 @@
   <!-- Toggle UI Button -->
   <button id="btn-toggle-ui" title="Скрыть/показать панель">👁 Скрыть интерфейс</button>
 
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Drag and Drop Overlay -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-box">
+      🌌 Перетащите панораму сюда
+      <small>Поддерживаются форматы: TIF, TIFF, JPG, PNG, WEBP, AVIF</small>
+    </div>
+  </div>
+
   <!-- Overlay UI -->
   <div id="ui-overlay">
     <div class="header">
@@ -49,7 +60,7 @@
       <button id="btn-upload-bg" class="btn" title="Выбрать любую картинку космоса (панораму) с компьютера">
         <span>🌌</span> Свой фон
       </button>
-      <input type="file" id="input-bg-file" accept="image/*" style="display: none;">
+      <input type="file" id="input-bg-file" accept=".tif,.tiff,.jpg,.jpeg,.png,.webp,.avif,.bmp,image/*" style="display: none;">
 
       <div class="divider"></div>
 

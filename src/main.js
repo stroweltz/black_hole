@@ -7,6 +7,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
 import { CosmicAudio } from './audio.js';
+import UTIF from './utils/utif.js';
 
 // --- Renderer Setup ---
 const canvasContainer = document.getElementById('canvas-container');
@@ -202,6 +203,115 @@ if (btnFullscreen) {
   });
 }
 
+// --- Toast Notifications ---
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(message, duration = 3000) {
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove('show');
+  }, duration);
+}
+
+// --- Multi-Format Skybox Image Loader (TIF/TIFF, JPG, PNG, WEBP, AVIF, BMP) ---
+function applySkyboxTexture(texture, name) {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+
+  blackHoleMaterial.uniforms.uMilkyWay.value = texture;
+  if (btnUploadBg) {
+    btnUploadBg.classList.add('active');
+    const label = name.length > 14 ? name.substring(0, 12) + '...' : name;
+    btnUploadBg.innerHTML = `<span>🌌</span> Фон: ${label}`;
+  }
+}
+
+async function handleSkyboxFile(file) {
+  if (!file) return;
+  const fileName = file.name;
+  const ext = fileName.split('.').pop().toLowerCase();
+
+  showToast(`Загрузка панорамы: ${fileName}...`, 4000);
+
+  if (ext === 'tif' || ext === 'tiff') {
+    try {
+      showToast(`Декодирование TIFF (${(file.size / (1024 * 1024)).toFixed(1)} МБ)...`, 6000);
+      const buffer = await file.arrayBuffer();
+      const ifds = UTIF.decode(buffer);
+      if (!ifds || !ifds.length) {
+        throw new Error('Файл не содержит корректных блоков IFD');
+      }
+      UTIF.decodeImage(buffer, ifds[0]);
+      const w = ifds[0].width || ifds[0].t256?.[0];
+      const h = ifds[0].height || ifds[0].t257?.[0];
+      if (!w || !h) {
+        throw new Error('Не удалось определить размеры изображения TIFF');
+      }
+
+      const rgba = UTIF.toRGBA8(ifds[0]);
+
+      // Constrain texture to max GPU capabilities if needed
+      const maxTex = renderer.capabilities.maxTextureSize || 8192;
+      let targetW = w;
+      let targetH = h;
+      if (targetW > maxTex || targetH > maxTex) {
+        const scale = Math.min(maxTex / targetW, maxTex / targetH);
+        targetW = Math.round(targetW * scale);
+        targetH = Math.round(targetH * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+
+      if (targetW === w && targetH === h) {
+        const imgData = ctx.createImageData(w, h);
+        imgData.data.set(rgba);
+        ctx.putImageData(imgData, 0, 0);
+      } else {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext('2d');
+        const imgData = tempCtx.createImageData(w, h);
+        imgData.data.set(rgba);
+        tempCtx.putImageData(imgData, 0, 0);
+        ctx.drawImage(tempCanvas, 0, 0, targetW, targetH);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      applySkyboxTexture(texture, fileName);
+      showToast(`✓ Панорама TIFF загружена: ${targetW}×${targetH}`, 3500);
+    } catch (err) {
+      console.error('Ошибка при обработке TIFF:', err);
+      showToast(`❌ Ошибка чтения TIFF: ${err.message}`, 4500);
+    }
+  } else {
+    // JPG, PNG, WEBP, AVIF, BMP, etc.
+    const url = URL.createObjectURL(file);
+    texLoader.load(
+      url,
+      (customTex) => {
+        applySkyboxTexture(customTex, fileName);
+        showToast(`✓ Панорама загружена: ${fileName}`, 3500);
+        URL.revokeObjectURL(url);
+      },
+      undefined,
+      (err) => {
+        console.error('Ошибка загрузки текстуры:', err);
+        showToast('❌ Ошибка загрузки изображения', 4500);
+      }
+    );
+  }
+}
+
 // Custom Skybox Image Upload Support
 if (btnUploadBg && inputBgFile) {
   btnUploadBg.addEventListener('click', () => {
@@ -210,21 +320,45 @@ if (btnUploadBg && inputBgFile) {
 
   inputBgFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    texLoader.load(url, (customTex) => {
-      customTex.wrapS = THREE.RepeatWrapping;
-      customTex.wrapT = THREE.ClampToEdgeWrapping;
-      customTex.minFilter = THREE.LinearFilter;
-      customTex.magFilter = THREE.LinearFilter;
-
-      blackHoleMaterial.uniforms.uMilkyWay.value = customTex;
-      btnUploadBg.classList.add('active');
-      btnUploadBg.innerHTML = '<span>🌌</span> Фон: свой (' + file.name.substring(0, 10) + '...)';
-    });
+    if (file) {
+      handleSkyboxFile(file);
+    }
   });
 }
+
+// Drag & Drop Support
+const dropzone = document.getElementById('dropzone');
+let dragCounter = 0;
+
+window.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragCounter++;
+  if (dropzone) dropzone.classList.add('active');
+});
+
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+});
+
+window.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  dragCounter--;
+  if (dragCounter <= 0 && dropzone) {
+    dropzone.classList.remove('active');
+    dragCounter = 0;
+  }
+});
+
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  if (dropzone) dropzone.classList.remove('active');
+
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) {
+    handleSkyboxFile(files[0]);
+  }
+});
 
 // --- Animation Loop ---
 const clock = new THREE.Clock();
@@ -255,6 +389,9 @@ function animate() {
   }
 
   controls.update();
+
+  // Update dynamic audio redshift/distance modulation
+  cosmicAudio.update(camera.position.length());
 
   // Center bounding mesh around camera
   blackHoleMesh.position.copy(camera.position);
