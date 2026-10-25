@@ -23,6 +23,7 @@ html, body {
   width: 100%;
   height: 100%;
   z-index: 1;
+  touch-action: none;
 }
 
 /* UI Overlay */
@@ -80,13 +81,13 @@ html, body {
   align-items: center;
   gap: 8px;
   margin-top: 14px;
-  background: rgba(10, 12, 18, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(10, 14, 22, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 12px;
   color: #cbd5e1;
-  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .controls-hint .mouse-icon {
@@ -115,11 +116,10 @@ html, body {
 /* Telemetry HUD (Cockpit Relativistic Avionics) */
 .telemetry-hud {
   pointer-events: auto;
-  background: rgba(10, 14, 22, 0.75);
+  background: rgba(10, 14, 24, 0.90);
   border: 1px solid rgba(255, 170, 70, 0.25);
   border-radius: 14px;
   padding: 10px 16px;
-  backdrop-filter: blur(20px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 140, 40, 0.08);
   margin-right: 0;
   width: 100%;
@@ -199,7 +199,7 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(10, 14, 22, 0.65);
+  background: rgba(10, 14, 24, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #cbd5e1;
   padding: 8px 16px;
@@ -207,7 +207,6 @@ html, body {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  backdrop-filter: blur(14px);
   transition: all 0.25s ease;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   box-sizing: border-box;
@@ -267,11 +266,10 @@ body.ui-hidden #btn-toggle-ui {
   align-items: center;
   flex-wrap: nowrap;
   gap: 8px;
-  background: rgba(8, 10, 16, 0.78);
+  background: rgba(8, 12, 20, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   padding: 8px 14px;
-  backdrop-filter: blur(20px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 140, 40, 0.08);
   max-width: 98vw;
   overflow-x: auto;
@@ -409,14 +407,13 @@ body.ui-hidden #btn-toggle-ui {
   bottom: 96px;
   left: 50%;
   transform: translateX(-50%) translateY(20px);
-  background: rgba(14, 18, 28, 0.88);
+  background: rgba(14, 18, 28, 0.95);
   border: 1px solid rgba(255, 170, 70, 0.4);
   color: #f1f5f9;
   padding: 10px 22px;
   border-radius: 24px;
   font-size: 13px;
   font-weight: 500;
-  backdrop-filter: blur(16px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 15px rgba(255, 150, 50, 0.2);
   pointer-events: none;
   opacity: 0;
@@ -436,8 +433,7 @@ body.ui-hidden #btn-toggle-ui {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(2, 4, 8, 0.78);
-  backdrop-filter: blur(10px);
+  background: rgba(2, 4, 8, 0.90);
   border: 3px dashed rgba(255, 170, 70, 0.65);
   z-index: 999;
   display: flex;

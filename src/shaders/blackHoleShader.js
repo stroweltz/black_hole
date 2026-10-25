@@ -12,7 +12,6 @@ export const BlackHoleShader = {
     uPlanetPos: { value: null },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
-    uStars: { value: null },
     uSkyBrightness: { value: 0.65 }
   },
 
@@ -37,7 +36,6 @@ export const BlackHoleShader = {
     uniform vec3 uPlanetPos;
     uniform float uEmbersVisible;
     uniform sampler2D uMilkyWay;
-    uniform sampler2D uStars;
     uniform float uSkyBrightness;
 
     #define PI 3.141592653589793
@@ -164,13 +162,13 @@ export const BlackHoleShader = {
       // Mathematical guarantee: radial gradient is CONSTANT in time and NEVER winds into vinyl record stripes!
       float phi = atan(pos.z, pos.x);
       float spiralPitch = 2.4 * log(r / r_in);
-      float rotAngle = phi - uTime * uDiskSpeed * 0.42 + spiralPitch;
+      float rotAngle = phi - mod(uTime * uDiskSpeed * 0.42, TWO_PI) + spiralPitch;
 
       vec2 rotPos = vec2(r * cos(rotAngle), r * sin(rotAngle));
 
       // Organic turbulent plasma flow & filaments
-      float turbulence1 = fbm3D(vec3(rotPos * 0.55, r * 0.25 + uTime * 0.05));
-      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.45, r * 0.65 - uTime * 0.07));
+      float turbulence1 = fbm3D(vec3(rotPos * 0.55, r * 0.25 + mod(uTime * 0.05, 1000.0)));
+      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.45, r * 0.65 - mod(uTime * 0.07, 1000.0)));
       float plasmaNoise = turbulence1 * 0.65 + turbulence2 * 0.35;
 
       // Gentle natural dust lanes (NO artificial high-frequency sine grooves)
@@ -199,7 +197,7 @@ export const BlackHoleShader = {
           if (h > 0.92) {
             vec2 delta = fract(emberGrid) - 0.5;
             float distSq = dot(delta, delta);
-            float twinkle = 0.65 + 0.35 * sin(uTime * 6.5 + h * 38.0);
+            float twinkle = 0.65 + 0.35 * sin(mod(uTime * 6.5, TWO_PI) + h * 38.0);
             emberSparkle = exp(-distSq * 36.0) * twinkle * 1.35 * emberFade;
           }
         }
@@ -276,7 +274,7 @@ export const BlackHoleShader = {
     // --- Procedural Miller's Water Planet Model ---
     vec3 shadePlanet(vec3 pNorm, vec3 viewSegDir, vec3 planetPos, float time) {
       vec3 pLocal = pNorm * 11.0;
-      float clouds = smoothstep(0.40, 0.76, fbm3D(pLocal + vec3(time * 0.06, 0.0, 0.0)));
+      float clouds = smoothstep(0.40, 0.76, fbm3D(pLocal + vec3(mod(time * 0.06, 1000.0), 0.0, 0.0)));
       float waves = noise3D(pLocal * 4.0);
 
       vec3 oceanCol = mix(vec3(0.04, 0.18, 0.36), vec3(0.08, 0.30, 0.50), waves * 0.5 + 0.5);

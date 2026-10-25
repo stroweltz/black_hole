@@ -105,7 +105,6 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: placeholderTex },
-    uStars: { value: placeholderTex },
     uSkyBrightness: { value: 0.65 }
   },
   vertexShader: BlackHoleShader.vertexShader,
@@ -534,7 +533,7 @@ function animate() {
     visualTimeMultiplier = Math.min(2.5, schwDilation);
   }
 
-  simTime += delta * visualTimeMultiplier;
+  simTime = (simTime + delta * visualTimeMultiplier) % 86400.0;
 
   // Update Miller's planet orbital position
   planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * orbitMultiplier;
@@ -575,10 +574,10 @@ function animate() {
     }
   }
 
-  // Subtle cinematic idle drift when not actively navigating
+  // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
   if (!controls.isInteracting && !controls.isResetting) {
     const driftAngle = simTime * 0.025;
-    camera.position.y += Math.sin(driftAngle) * 0.0006;
+    camera.position.y += Math.sin(driftAngle) * (0.036 * delta);
     controls.targetYaw += delta * 0.003;
     if (camera.position.length() < controls.minRadius) {
       camera.position.setLength(controls.minRadius);
@@ -710,32 +709,25 @@ async function loadTextureWithProgress(url, onProgress) {
 
 // --- Application Boot Sequence ---
 async function startSimulation() {
-  const EXPECTED_TOTAL_BYTES = 9940112; // milkyway.jpg (~9.84MB) + stars.png (~96KB)
-  const loadedBytes = { mw: 0, st: 0 };
+  const EXPECTED_TOTAL_BYTES = 9843333; // milkyway.jpg (~9.38MB)
   let totalReportedBytes = EXPECTED_TOTAL_BYTES;
 
-  function reportProgress(key, loaded, total) {
-    loadedBytes[key] = loaded;
-    if (key === 'mw' && total > 0) {
-      totalReportedBytes = total + 96779;
+  function reportProgress(loaded, total) {
+    if (total > 0) {
+      totalReportedBytes = total;
     }
-    const sum = loadedBytes.mw + loadedBytes.st;
-    const progressRatio = Math.min(1.0, sum / Math.max(sum, totalReportedBytes));
+    const progressRatio = Math.min(1.0, loaded / Math.max(loaded, totalReportedBytes));
     const progressPercent = Math.min(85, Math.round(progressRatio * 85));
-    const mbLoaded = (sum / (1024 * 1024)).toFixed(1);
+    const mbLoaded = (loaded / (1024 * 1024)).toFixed(1);
     const mbTotal = (totalReportedBytes / (1024 * 1024)).toFixed(1);
     updatePreloader(progressPercent, `Загрузка звёздного неба... ${mbLoaded} / ${mbTotal} МБ (${Math.round(progressRatio * 100)}%)`);
   }
 
-  // Load both textures in parallel with real byte progress
-  const [mwTex, stTex] = await Promise.all([
-    loadTextureWithProgress('./milkyway.jpg', (loaded, total) => reportProgress('mw', loaded, total)),
-    loadTextureWithProgress('./stars.png', (loaded, total) => reportProgress('st', loaded, total))
-  ]);
+  // Load celestial background texture with real byte progress
+  const mwTex = await loadTextureWithProgress('./milkyway.jpg', (loaded, total) => reportProgress(loaded, total));
 
   updatePreloader(88, 'Подготовка текстур и видеопамяти...');
   blackHoleMaterial.uniforms.uMilkyWay.value = mwTex;
-  blackHoleMaterial.uniforms.uStars.value = stTex;
 
   updatePreloader(94, 'Компиляция релятивистских шейдеров...');
   try {

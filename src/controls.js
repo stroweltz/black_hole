@@ -35,11 +35,13 @@ export class SpaceFlightControls {
       boost: false
     };
 
-    // Mouse drag configuration
+    // Pointer drag & touch configuration
     this.isDragging = false;
     this.prevMouse = { x: 0, y: 0 };
+    this.activePointers = new Map();
+    this.prevPinchDist = null;
     this.rotateSpeed = 0.0026;
-    this.rotDamping = 0.12;
+    this.rotDampingCoeff = 7.8; // Frame-rate independent: 1 - exp(-k * dt) ≈ 0.12 at 60fps
 
     // Boundary constraints (Schwarzschild radius = 1.0, horizon = 1.002)
     // Allows flying directly to the event horizon razor edge (r = 1.015 Rs) where shadow engulfs ~97.5% of the sky!
@@ -84,36 +86,83 @@ export class SpaceFlightControls {
   }
 
   bindEvents() {
-    // Mouse Drag Listeners
-    this.domElement.addEventListener('mousedown', (e) => {
-      if (e.button === 0 || e.button === 2) {
+    // Touch-action on canvas prevents mobile browser scroll/gesture contention
+    this.domElement.style.touchAction = 'none';
+
+    // Pointer Events (Mouse, Touch, Stylus)
+    this.domElement.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.activePointers.size === 1) {
         this.isDragging = true;
         this.prevMouse.x = e.clientX;
         this.prevMouse.y = e.clientY;
+      } else if (this.activePointers.size === 2) {
+        const pts = Array.from(this.activePointers.values());
+        this.prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      }
+      this.setInteracting();
+      if (this.isResetting) this.isResetting = false;
+
+      try {
+        this.domElement.setPointerCapture(e.pointerId);
+      } catch (_) {}
+    });
+
+    this.domElement.addEventListener('pointermove', (e) => {
+      if (!this.activePointers.has(e.pointerId)) return;
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (this.activePointers.size === 1 && this.isDragging) {
+        const dx = e.clientX - this.prevMouse.x;
+        const dy = e.clientY - this.prevMouse.y;
+        this.prevMouse.x = e.clientX;
+        this.prevMouse.y = e.clientY;
+
+        this.targetYaw -= dx * this.rotateSpeed;
+        this.targetPitch -= dy * this.rotateSpeed;
+
+        // Clamp vertical pitch to ~87.5 degrees to avoid pole flip
+        const maxPitch = Math.PI * 0.485;
+        this.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, this.targetPitch));
         this.setInteracting();
-        if (this.isResetting) this.isResetting = false;
+      } else if (this.activePointers.size === 2 && this.prevPinchDist !== null) {
+        // Multi-touch pinch-to-zoom for mobile devices
+        const pts = Array.from(this.activePointers.values());
+        const currDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const distDiff = currDist - this.prevPinchDist;
+        this.prevPinchDist = currDist;
+
+        if (Math.abs(distDiff) > 1) {
+          const forward = new THREE.Vector3();
+          this.camera.getWorldDirection(forward);
+          const r = this.camera.position.length();
+          const pinchImpulse = (distDiff * 0.005) * Math.max(0.075, r * 0.022);
+          this.velocity.addScaledVector(forward, pinchImpulse);
+          this.setInteracting();
+        }
       }
     });
 
-    window.addEventListener('mousemove', (e) => {
-      if (!this.isDragging) return;
-      const dx = e.clientX - this.prevMouse.x;
-      const dy = e.clientY - this.prevMouse.y;
-      this.prevMouse.x = e.clientX;
-      this.prevMouse.y = e.clientY;
+    const onPointerEnd = (e) => {
+      this.activePointers.delete(e.pointerId);
+      if (this.activePointers.size === 0) {
+        this.isDragging = false;
+        this.prevPinchDist = null;
+      } else if (this.activePointers.size === 1) {
+        const remaining = Array.from(this.activePointers.values())[0];
+        this.prevMouse.x = remaining.x;
+        this.prevMouse.y = remaining.y;
+        this.prevPinchDist = null;
+      }
+      try {
+        this.domElement.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+    };
 
-      this.targetYaw -= dx * this.rotateSpeed;
-      this.targetPitch -= dy * this.rotateSpeed;
-
-      // Clamp vertical pitch to ~87.5 degrees to avoid pole flip
-      const maxPitch = Math.PI * 0.485;
-      this.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, this.targetPitch));
-      this.setInteracting();
-    });
-
-    window.addEventListener('mouseup', () => {
-      this.isDragging = false;
-    });
+    this.domElement.addEventListener('pointerup', onPointerEnd);
+    this.domElement.addEventListener('pointercancel', onPointerEnd);
 
     // Mouse Wheel Forward/Backward Impulse
     this.domElement.addEventListener('wheel', (e) => {
@@ -238,9 +287,10 @@ export class SpaceFlightControls {
       return;
     }
 
-    // Smooth view damping
-    this.yaw += (this.targetYaw - this.yaw) * this.rotDamping;
-    this.pitch += (this.targetPitch - this.pitch) * this.rotDamping;
+    // Smooth view damping (frame-rate independent: 1 - exp(-k * dt))
+    const dampFactor = 1.0 - Math.exp(-this.rotDampingCoeff * delta);
+    this.yaw += (this.targetYaw - this.yaw) * dampFactor;
+    this.pitch += (this.targetPitch - this.pitch) * dampFactor;
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
 
     // Direction vectors in world space
