@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 // High-Precision Relativistic Raymarching Shader for Schwarzschild Black Hole
 // Features: True Geodesic Lensing, Lensed Accretion Dust, Deep Skybox with Pinpoint Stars
 export const BlackHoleShader = {
@@ -7,7 +9,7 @@ export const BlackHoleShader = {
     uDiskSpeed: { value: 0.85 },
     uBloomGlow: { value: 1.0 },
     uPlanetVisible: { value: 1.0 },
-    uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
+    uPlanetPos: { value: null },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
     uStars: { value: null },
