@@ -148,6 +148,7 @@ composer.addPass(fxaaPass);
 // --- Audio ---
 const cosmicAudio = new CosmicAudio();
 window.cosmicAudio = cosmicAudio;
+cosmicAudio.preload();
 
 // --- State & Animation Parameters ---
 let diskSpeedMultiplier = 0.85;
@@ -945,7 +946,7 @@ function animate() {
 
   // Update real-time audio with observer state
   camera.getWorldDirection(camWorldDir);
-  cosmicAudio.update(camR, physicalGamma, shadowFrac, camera.position, camWorldDir);
+  cosmicAudio.update(camR, physicalGamma, shadowFrac, camera.position, diskSpeedMultiplier);
 
   // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
   if (!controls.isDragging && !controls.isInteracting && !controls.isResetting) {
