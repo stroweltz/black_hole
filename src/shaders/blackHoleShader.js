@@ -234,9 +234,12 @@ export const BlackHoleShader = {
       // The solid planet body clears and displaces accretion plasma within its volume
       float planetCutout = 1.0;
       if (uPlanetVisible > 0.5) {
-        float dPlanet = length(pos - uPlanetPos);
-        if (dPlanet < 0.22) return vec4(0.0);
-        planetCutout = smoothstep(0.22, 0.28, dPlanet);
+        vec3 toP = pos - uPlanetPos;
+        float dPlanet2 = dot(toP, toP);
+        if (dPlanet2 < 0.0484) return vec4(0.0); // 0.22 * 0.22
+        if (dPlanet2 < 0.0784) {                 // 0.28 * 0.28
+          planetCutout = smoothstep(0.22, 0.28, sqrt(dPlanet2));
+        }
       }
 
       float density = (structure + emberSparkle) * radialProfile * verticalFade * planetCutout;
@@ -299,7 +302,6 @@ export const BlackHoleShader = {
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
-      float minRadius = 1e6;
       bool hitHorizon = false;
       bool escaped = false;
 
@@ -307,11 +309,9 @@ export const BlackHoleShader = {
       // Optimized for high performance and seamless whole-space relativistic integration
       const int MAX_STEPS = 128;
       vec3 prevPos = rayPos;
+      float r = camDist;
 
       for (int i = 0; i < MAX_STEPS; i++) {
-        float r = length(rayPos);
-        minRadius = min(minRadius, r);
-
         // 1. Event Horizon hit: light is completely captured into the singularity
         if (r <= r_eh) {
           hitHorizon = true;
@@ -325,37 +325,45 @@ export const BlackHoleShader = {
         }
 
         // 3. Gravitationally Lensed Miller's Planet & Accretion Disk Segment Intersections
-        vec3 seg = rayPos - prevPos;
-        float segLen = length(seg);
-
         bool hitPlanetThisStep = false;
         float tHitPlanet = 1e6;
         vec3 pHitPos = vec3(0.0);
         vec3 pNorm = vec3(0.0);
+        vec3 pViewDir = rayDir;
+        float segLen = 0.0;
 
-        if (uPlanetVisible > 0.5 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2 && segLen > 1e-5 && i > 0) {
-          vec3 segDir = seg / segLen;
+        if (uPlanetVisible > 0.5 && i > 0 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
           vec3 toP = prevPos - uPlanetPos;
-          float pRad = 0.22;
-          float boundR = segLen + pRad + 0.35;
-          if (dot(toP, toP) < boundR * boundR) {
-            float b = dot(toP, segDir);
-            float c = dot(toP, toP) - pRad * pRad;
-            float discr = b * b - c;
-            if (discr >= 0.0) {
-              float sqrtD = sqrt(discr);
-              float t1 = -b - sqrtD;
-              if (c < 0.0) {
-                // Ray penetrated inside planet volume: register immediate surface hit without tunneling
-                tHitPlanet = 0.0;
-                hitPlanetThisStep = true;
-                pHitPos = prevPos;
-                pNorm = normalize(pHitPos - uPlanetPos);
-              } else if (t1 >= 0.0 && t1 <= segLen) {
-                tHitPlanet = t1;
-                hitPlanetThisStep = true;
-                pHitPos = prevPos + segDir * t1;
-                pNorm = normalize(pHitPos - uPlanetPos);
+          float toP2 = dot(toP, toP);
+          if (toP2 < 2.0) {
+            vec3 seg = rayPos - prevPos;
+            segLen = length(seg);
+            if (segLen > 1e-5) {
+              vec3 segDir = seg / segLen;
+              float pRad = 0.22;
+              float boundR = segLen + pRad + 0.35;
+              if (toP2 < boundR * boundR) {
+                float b = dot(toP, segDir);
+                float c = toP2 - pRad * pRad;
+                float discr = b * b - c;
+                if (discr >= 0.0) {
+                  float sqrtD = sqrt(discr);
+                  float t1 = -b - sqrtD;
+                  if (c < 0.0) {
+                    // Ray penetrated inside planet volume: register immediate surface hit without tunneling
+                    tHitPlanet = 0.0;
+                    hitPlanetThisStep = true;
+                    pHitPos = prevPos;
+                    pNorm = normalize(pHitPos - uPlanetPos);
+                    pViewDir = segDir;
+                  } else if (t1 >= 0.0 && t1 <= segLen) {
+                    tHitPlanet = t1;
+                    hitPlanetThisStep = true;
+                    pHitPos = prevPos + segDir * t1;
+                    pNorm = normalize(pHitPos - uPlanetPos);
+                    pViewDir = segDir;
+                  }
+                }
               }
             }
           }
@@ -366,13 +374,15 @@ export const BlackHoleShader = {
         float tHitDisk = 1e6;
         vec3 hitPosDisk = vec3(0.0);
 
-        if (prevPos.y * rayPos.y <= 0.0 && i > 0 && segLen > 1e-5) {
+        if (prevPos.y * rayPos.y <= 0.0 && i > 0 && abs(prevPos.y - rayPos.y) > 1e-6) {
           float uCross = clamp(prevPos.y / (prevPos.y - rayPos.y + 1e-6), 0.0, 1.0);
-          tHitDisk = uCross * segLen;
           hitPosDisk = mix(prevPos, rayPos, uCross);
           float hitR2 = dot(hitPosDisk.xz, hitPosDisk.xz);
           if (hitR2 >= 6.15 && hitR2 <= 104.04) {
             hitDiskThisStep = true;
+            if (hitPlanetThisStep) {
+              tHitDisk = uCross * segLen;
+            }
           }
         }
 
@@ -380,7 +390,7 @@ export const BlackHoleShader = {
         if (hitPlanetThisStep && hitDiskThisStep) {
           if (tHitPlanet <= tHitDisk) {
             // Planet is in front of disk crossing: planet fully occludes disk behind it!
-            vec3 pCol = shadePlanet(pNorm, seg / segLen, uPlanetPos, uTime);
+            vec3 pCol = shadePlanet(pNorm, pViewDir, uPlanetPos, uTime);
             accumColor += (1.0 - accumAlpha) * pCol;
             accumAlpha = 1.0;
             break;
@@ -393,13 +403,13 @@ export const BlackHoleShader = {
             }
             if (accumAlpha > 0.98) break;
 
-            vec3 pCol = shadePlanet(pNorm, seg / segLen, uPlanetPos, uTime);
+            vec3 pCol = shadePlanet(pNorm, pViewDir, uPlanetPos, uTime);
             accumColor += (1.0 - accumAlpha) * pCol;
             accumAlpha = 1.0;
             break;
           }
         } else if (hitPlanetThisStep) {
-          vec3 pCol = shadePlanet(pNorm, seg / segLen, uPlanetPos, uTime);
+          vec3 pCol = shadePlanet(pNorm, pViewDir, uPlanetPos, uTime);
           accumColor += (1.0 - accumAlpha) * pCol;
           accumAlpha = 1.0;
           break;
@@ -428,8 +438,10 @@ export const BlackHoleShader = {
         // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
         // Prevents tunneling, eliminates mesh-crossing artifacts, and guarantees silky smooth silhouettes
         if (uPlanetVisible > 0.5) {
-          float dP = length(rayPos - uPlanetPos);
-          if (dP < 0.9) {
+          vec3 toPlanet = rayPos - uPlanetPos;
+          float dP2 = dot(toPlanet, toPlanet);
+          if (dP2 < 0.81) {
+            float dP = sqrt(dP2);
             stepSize = min(stepSize, max(0.035, (dP - 0.20) * 0.42));
           }
         }
@@ -444,6 +456,7 @@ export const BlackHoleShader = {
         rayDir += accel * stepSize;
         prevPos = rayPos;
         rayPos = halfPos + rayDir * (stepSize * 0.5);
+        r = length(rayPos);
       }
 
       // Gravitationally lensed deep space skybox
