@@ -341,7 +341,7 @@ export const BlackHoleShader = {
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Optimized for high performance and seamless whole-space relativistic integration
-      const int MAX_STEPS = 128;
+      const int MAX_STEPS = 90;
       vec3 prevPos = rayPos;
       float r = camDist;
 

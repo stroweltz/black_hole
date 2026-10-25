@@ -40,7 +40,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'h
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 // Optimal pixel ratio: cap at 1.25 to prevent 4K/5K fillrate bottlenecks on High-DPI displays while keeping 100% sharp visuals
-const targetDPR = Math.min(window.devicePixelRatio || 1.0, 1.25);
+const targetDPR = Math.min(window.devicePixelRatio || 1.0, 0.85);
 renderer.setPixelRatio(targetDPR);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
