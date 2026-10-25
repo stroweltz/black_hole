@@ -13,7 +13,7 @@ export const BlackHoleShader = {
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
     uStars: { value: null },
-    uSkyBrightness: { value: 0.42 }
+    uSkyBrightness: { value: 0.65 }
   },
 
   vertexShader: `
@@ -129,14 +129,20 @@ export const BlackHoleShader = {
       float theta = asin(clamp(skyDir.y, -1.0, 1.0));
       vec2 uv = vec2(phi / TWO_PI + 0.5, theta / PI + 0.5);
 
-      // Photographic Deep Space Skybox (Pure authentic astrophotography, no artificial stars)
-      vec3 mw = texture2D(uMilkyWay, uv).rgb;
+      // Continuous screen derivatives across equirectangular phi wrap seam [-PI, PI]:
+      // Eliminates the vertical blurry seam artifact caused by atan derivative discontinuity
+      vec2 dUvDx = dFdx(uv);
+      vec2 dUvDy = dFdy(uv);
+      dUvDx.x -= floor(dUvDx.x + 0.5);
+      dUvDy.x -= floor(dUvDy.x + 0.5);
 
-      // Contrast +20% (pivot around midpoint)
-      vec3 contrasted = clamp((mw - vec3(0.5)) * 1.20 + vec3(0.5), 0.0, 1.0);
+      // Hardware trilinear filtering + anisotropic mipmapping with continuous gradients
+      vec3 mw = textureGrad(uMilkyWay, uv, dUvDx, dUvDy).rgb;
 
-      // Brightness -15%
-      vec3 skyCol = contrasted * (uSkyBrightness * 0.85);
+      // Authentic astrophysical radiance in linear photometric space:
+      // Texture is decoded to linear sRGB by WebGL2 hardware (SRGBColorSpace),
+      // eliminating double sRGB gamma encoding and ad-hoc contrast hacks.
+      vec3 skyCol = mw * uSkyBrightness;
 
       return skyCol;
     }

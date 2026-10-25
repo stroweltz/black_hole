@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
 import { CosmicAudio } from './audio.js';
@@ -73,8 +74,22 @@ const controls = new SpaceFlightControls(camera, renderer.domElement);
 // --- Skybox Textures: Milky Way + Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader();
 
+// Helper to configure celestial skybox textures with correct color space, mipmaps, and anisotropy
+function configureSkyboxTexture(tex) {
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  tex.needsUpdate = true;
+  return tex;
+}
+
 // Initial placeholder texture to construct shader material safely before asset stream completes
 const placeholderTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+placeholderTex.colorSpace = THREE.SRGBColorSpace;
 placeholderTex.needsUpdate = true;
 
 // --- Black Hole Raymarching Mesh ---
@@ -91,7 +106,7 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: placeholderTex },
     uStars: { value: placeholderTex },
-    uSkyBrightness: { value: 0.38 }
+    uSkyBrightness: { value: 0.65 }
   },
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
@@ -103,25 +118,27 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
 const blackHoleMesh = new THREE.Mesh(boxGeo, blackHoleMaterial);
 scene.add(blackHoleMesh);
 
-// --- Post-Processing (Balanced, Cinematic Bloom) ---
+// --- Post-Processing (Balanced, Cinematic Bloom & High-Fidelity Anti-Aliasing) ---
 const renderScene = new RenderPass(scene, camera);
 
-// Half-resolution bloom buffer: standard real-time practice for soft filmic glow with ~4x lower memory bandwidth
-const bloomWidth = Math.max(256, Math.floor(window.innerWidth * 0.5));
-const bloomHeight = Math.max(256, Math.floor(window.innerHeight * 0.5));
+// Bloom buffer: UnrealBloomPass internally scales blur render targets by 1/2, 1/4, 1/8...
+// Providing full effective buffer dimensions guarantees consistent half-res glow before and after resize
 const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(bloomWidth, bloomHeight),
+  new THREE.Vector2(window.innerWidth * targetDPR, window.innerHeight * targetDPR),
   0.42,  // bloom strength
   0.42,  // bloom radius
   0.84   // bloom threshold (only incandescent core & photon ring glow)
 );
 
 const outputPass = new OutputPass();
+const fxaaPass = new FXAAPass();
 
 const composer = new EffectComposer(renderer);
+composer.setPixelRatio(targetDPR);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 composer.addPass(outputPass);
+composer.addPass(fxaaPass);
 
 // --- Audio ---
 const cosmicAudio = new CosmicAudio();
@@ -311,11 +328,7 @@ function showToast(message, duration = 3000) {
 
 // --- Multi-Format Skybox Image Loader (TIF/TIFF, JPG, PNG, WEBP, AVIF, BMP) ---
 function applySkyboxTexture(texture, name) {
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
+  configureSkyboxTexture(texture);
 
   blackHoleMaterial.uniforms.uMilkyWay.value = texture;
   if (btnUploadBg) {
@@ -673,11 +686,7 @@ async function loadTextureWithProgress(url, onProgress) {
     URL.revokeObjectURL(objectUrl);
 
     const tex = new THREE.Texture(img);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    tex.needsUpdate = true;
+    configureSkyboxTexture(tex);
     return tex;
   } catch (err) {
     console.warn(`Progress fetch failed for ${url}, falling back to TextureLoader:`, err);
@@ -686,11 +695,7 @@ async function loadTextureWithProgress(url, onProgress) {
       loader.load(
         url,
         (tex) => {
-          tex.wrapS = THREE.RepeatWrapping;
-          tex.wrapT = THREE.ClampToEdgeWrapping;
-          tex.minFilter = THREE.LinearFilter;
-          tex.magFilter = THREE.LinearFilter;
-          tex.needsUpdate = true;
+          configureSkyboxTexture(tex);
           resolve(tex);
         },
         undefined,
@@ -764,9 +769,10 @@ window.addEventListener('resize', () => {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
 
+  const pr = Math.min(window.devicePixelRatio || 1.0, 1.25);
   renderer.setSize(width, height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1.0, 1.25));
+  renderer.setPixelRatio(pr);
 
+  composer.setPixelRatio(pr);
   composer.setSize(width, height);
-  bloomPass.setSize(Math.max(256, Math.floor(width * 0.5)), Math.max(256, Math.floor(height * 0.5)));
 });
