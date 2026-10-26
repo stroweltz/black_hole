@@ -85,8 +85,8 @@ function configureSkyboxTexture(tex) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.generateMipmaps = false;
-  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.needsUpdate = true;
   return tex;
@@ -137,12 +137,16 @@ const bloomPass = new UnrealBloomPass(
 );
 
 const outputPass = new OutputPass();
+const fxaaPass = new FXAAPass();
+fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * targetDPR);
+fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * targetDPR);
 
 const composer = new EffectComposer(renderer);
 composer.setPixelRatio(targetDPR);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 composer.addPass(outputPass);
+composer.addPass(fxaaPass);
 
 // --- Lightweight Performance Diagnostic Profiler ---
 function getGPUInfo() {
@@ -1014,7 +1018,8 @@ function animate() {
   diagAccum.audio += performance.now() - tAudio0;
 
   // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
-  if (!controls.isDragging && !controls.isInteracting && !controls.isResetting) {
+  // Only engaged when in wide orbit (camR > 3.0) to prevent pitching down into the horizon when surface skimming
+  if (!controls.isDragging && !controls.isInteracting && !controls.isResetting && camR > 3.0) {
     const idleAngle = delta * 0.015;
     camera.position.applyAxisAngle(IDLE_ROTATION_AXIS, idleAngle);
     camera.lookAt(0, 0, 0);
@@ -1235,4 +1240,8 @@ window.addEventListener('resize', () => {
 
   composer.setPixelRatio(pr);
   composer.setSize(width, height);
+  if (fxaaPass) {
+    fxaaPass.material.uniforms['resolution'].value.x = 1 / (width * pr);
+    fxaaPass.material.uniforms['resolution'].value.y = 1 / (height * pr);
+  }
 });

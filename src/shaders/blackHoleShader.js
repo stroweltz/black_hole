@@ -113,7 +113,9 @@ export const BlackHoleShader = {
     }
 
     // --- Photographic Deep Space Skybox (Milky Way + Pinpoint Stars) ---
-    vec3 getSkybox(vec3 dir) {
+    // Smooth anti-aliased celestial sampling using analytical LOD bias based on gravitational deflection
+    // Eliminates sub-pixel star shimmering/flickering near lensed photon ring without branch-divergent dFdx
+    vec3 getSkybox(vec3 dir, float deflection) {
       // Rotate celestial sphere coordinates so the Milky Way band crosses gracefully
       // and deep black space with stars surrounds the black hole
       mat3 rotSky = mat3(
@@ -127,9 +129,10 @@ export const BlackHoleShader = {
       float theta = asin(clamp(skyDir.y, -1.0, 1.0));
       vec2 uv = vec2(phi / TWO_PI + 0.5, theta / PI + 0.5);
 
-      // High-performance standard equirectangular celestial sampling
-      // Bypasses dFdx / textureGrad inside divergent flow to eliminate Direct3D HLSL X3595 compilation delays & TDR resets
-      vec3 mw = texture2D(uMilkyWay, uv).rgb;
+      // In asymptotically flat space: lodBias = 0 (pristine, sharp pinpoint stars)
+      // When space is curved/deflected: deflection compresses celestial field, smoothly blend mip levels 1-3 to prevent strobe flickering
+      float lodBias = clamp(log2(1.0 + 20.0 * deflection), 0.0, 3.5);
+      vec3 mw = texture2D(uMilkyWay, uv, lodBias).rgb;
       vec3 skyCol = mw * uSkyBrightness;
 
       return skyCol;
@@ -487,7 +490,18 @@ export const BlackHoleShader = {
       // Only rays that successfully escaped past r > 13 sample the celestial sphere.
       // Rays trapped near the horizon or photon sphere that exhaust MAX_STEPS are treated as captured (black void).
       if (!hitHorizon && escaped && accumAlpha < 1.0) {
-        vec3 sky = getSkybox(normalize(rayDir));
+        // Analytical weak-field tail continuation from escape position to infinity:
+        // Eliminates step-count discretization rings ("слоение неба") and boundary cuts
+        // by smoothly integrating the remaining gravitational deflection from r to infinity.
+        float radProj = dot(rayPos, rayDir);
+        float cosA = clamp(radProj / max(r, 1e-4), -1.0, 1.0);
+        vec3 bVec = rayPos - radProj * rayDir;
+        float bSq = dot(bVec, bVec);
+        float tailFactor = max(0.0, 1.0 - (3.0 * cosA - cosA * cosA * cosA) * 0.5);
+        vec3 finalRayDir = normalize(rayDir - bVec * (rs / max(bSq, 0.04) * tailFactor));
+
+        float deflection = 1.0 - dot(initRayDir, finalRayDir);
+        vec3 sky = getSkybox(finalRayDir, deflection);
         accumColor += (1.0 - accumAlpha) * sky;
       }
 
