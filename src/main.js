@@ -161,11 +161,11 @@ const PRESETS = {
     title: '🌀 Фотонная сфера (r = 1.50 Rs, тень 50% неба)'
   },
   portal: {
-    // Sub-photon sphere: looking radially outward into deep space
+    // Razor-edge horizon boundary (r = 1.018 Rs): looking outward into deep space
     // Relativistic tetrad transformation gathers the entire universe into a sharp circular porthole!
-    pos: new THREE.Vector3(0.0, 0.32, 1.02),
-    target: new THREE.Vector3(0.0, 3.2, 10.2),
-    title: '🕳️ Окно Вселенной (r = 1.07 Rs, тень 89% неба)'
+    pos: new THREE.Vector3(0.0, 0.08, 1.015),
+    target: new THREE.Vector3(0.0, 2.5, 10.2),
+    title: '🕳️ Окно Вселенной (r = 1.018 Rs, тень 97.4% неба)'
   }
 };
 

@@ -143,7 +143,7 @@ export const BlackHoleShader = {
 
     // --- Physical Accretion Disk Model with Gravitationally Lensed Dust ---
     const float rs = 1.0;            // Schwarzschild radius
-    const float r_eh = 1.015;        // Event Horizon cutoff
+    const float r_eh = 1.005;        // Event Horizon cutoff (allows razor-edge skim at r = 1.015 Rs)
     const float r_in = 2.48;         // Inner disk edge
     const float r_out = 10.2;        // Outer disk edge
 
