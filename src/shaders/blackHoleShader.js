@@ -127,19 +127,9 @@ export const BlackHoleShader = {
       float theta = asin(clamp(skyDir.y, -1.0, 1.0));
       vec2 uv = vec2(phi / TWO_PI + 0.5, theta / PI + 0.5);
 
-      // Continuous screen derivatives across equirectangular phi wrap seam [-PI, PI]:
-      // Eliminates the vertical blurry seam artifact caused by atan derivative discontinuity
-      vec2 dUvDx = dFdx(uv);
-      vec2 dUvDy = dFdy(uv);
-      dUvDx.x -= floor(dUvDx.x + 0.5);
-      dUvDy.x -= floor(dUvDy.x + 0.5);
-
-      // Hardware trilinear filtering + anisotropic mipmapping with continuous gradients
-      vec3 mw = textureGrad(uMilkyWay, uv, dUvDx, dUvDy).rgb;
-
-      // Authentic astrophysical radiance in linear photometric space:
-      // Texture is decoded to linear sRGB by WebGL2 hardware (SRGBColorSpace),
-      // eliminating double sRGB gamma encoding and ad-hoc contrast hacks.
+      // High-performance standard equirectangular celestial sampling
+      // Bypasses dFdx / textureGrad inside divergent flow to eliminate Direct3D HLSL X3595 compilation delays & TDR resets
+      vec3 mw = texture2D(uMilkyWay, uv).rgb;
       vec3 skyCol = mw * uSkyBrightness;
 
       return skyCol;
@@ -487,7 +477,7 @@ export const BlackHoleShader = {
         float inv5 = inv * inv * inv * inv * inv;
         vec3 accel = - 1.5 * rs * h2 * inv5 * halfPos;
 
-        rayDir += accel * stepSize;
+        rayDir = normalize(rayDir + accel * stepSize);
         prevPos = rayPos;
         rayPos = halfPos + rayDir * (stepSize * 0.5);
         r = length(rayPos);

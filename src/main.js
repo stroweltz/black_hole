@@ -85,10 +85,9 @@ function configureSkyboxTexture(tex) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   tex.needsUpdate = true;
   return tex;
 }
@@ -128,22 +127,57 @@ const renderScene = new RenderPass(scene, camera);
 
 // Bloom buffer: UnrealBloomPass internally scales blur render targets by 1/2, 1/4, 1/8...
 // Providing full effective buffer dimensions guarantees consistent half-res glow before and after resize
+const bloomWidth = Math.max(256, Math.floor(window.innerWidth * 0.5));
+const bloomHeight = Math.max(256, Math.floor(window.innerHeight * 0.5));
 const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth * targetDPR, window.innerHeight * targetDPR),
+  new THREE.Vector2(bloomWidth, bloomHeight),
   0.42,  // bloom strength
   0.42,  // bloom radius
   0.84   // bloom threshold (only incandescent core & photon ring glow)
 );
 
 const outputPass = new OutputPass();
-const fxaaPass = new FXAAPass();
 
 const composer = new EffectComposer(renderer);
 composer.setPixelRatio(targetDPR);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 composer.addPass(outputPass);
-composer.addPass(fxaaPass);
+
+// --- Lightweight Performance Diagnostic Profiler ---
+function getGPUInfo() {
+  const gl = renderer.getContext();
+  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+  if (debugInfo) {
+    return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+  }
+  return renderer.capabilities.isWebGL2 ? 'WebGL2 (Generic)' : 'WebGL1 (Generic)';
+}
+
+const diagAccum = {
+  controls: 0,
+  hud: 0,
+  audio: 0,
+  shader: 0,
+  bloom: 0,
+  output: 0,
+  totalFrame: 0
+};
+let diagFrames = 0;
+let diagLastTime = performance.now();
+
+function profilePass(pass, key) {
+  const origRender = pass.render.bind(pass);
+  pass.render = function(r, writeBuffer, readBuffer, deltaTime, maskActive) {
+    const t0 = performance.now();
+    origRender(r, writeBuffer, readBuffer, deltaTime, maskActive);
+    diagAccum[key] += performance.now() - t0;
+  };
+}
+
+profilePass(renderScene, 'shader');
+profilePass(bloomPass, 'bloom');
+profilePass(outputPass, 'output');
 
 // --- Audio ---
 const cosmicAudio = new CosmicAudio();
@@ -873,6 +907,7 @@ function formatKerrDilation(gamma) {
 
 function animate() {
   requestAnimationFrame(animate);
+  const frameStart = performance.now();
 
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();
@@ -926,7 +961,9 @@ function animate() {
   );
 
   // Update space flight controls (WASD movement & smooth mouse rotation)
+  const tCtrl0 = performance.now();
   controls.update(delta);
+  diagAccum.controls += performance.now() - tCtrl0;
 
   // Update shader uniforms
   blackHoleMaterial.uniforms.uTime.value = simTime;
@@ -944,6 +981,7 @@ function animate() {
   const physicalGamma = 1.0 / Math.sqrt(Math.max(0.0001, 1.0 - 1.0 / Math.max(camR, 1.002)));
 
   // Real-time Relativistic Telemetry HUD update (throttled to ~15-20 Hz with string diffing)
+  const tHud0 = performance.now();
   hudFrameCount++;
   if (hudFrameCount % 4 === 0) {
     if (telRadius) {
@@ -967,10 +1005,13 @@ function animate() {
       }
     }
   }
+  diagAccum.hud += performance.now() - tHud0;
 
   // Update real-time audio with observer state
+  const tAudio0 = performance.now();
   camera.getWorldDirection(camWorldDir);
   cosmicAudio.update(camR, physicalGamma, shadowFrac, camera.position, diskSpeedMultiplier);
+  diagAccum.audio += performance.now() - tAudio0;
 
   // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
   if (!controls.isDragging && !controls.isInteracting && !controls.isResetting) {
@@ -987,6 +1028,39 @@ function animate() {
 
   // Render with post-processing
   composer.render();
+
+  // Periodic Diagnostics Telemetry Collection & Dispatch (~every 2 seconds)
+  diagAccum.totalFrame += performance.now() - frameStart;
+  diagFrames++;
+
+  const nowTime = performance.now();
+  if (nowTime - diagLastTime >= 2000) {
+    const elapsed = nowTime - diagLastTime;
+    const avgFps = Math.round((diagFrames * 1000) / elapsed);
+    const metrics = {
+      fps: avgFps,
+      gpu: getGPUInfo(),
+      res: `${window.innerWidth}x${window.innerHeight} (DPR ${renderer.getPixelRatio().toFixed(2)})`,
+      frameMs: (diagAccum.totalFrame / diagFrames).toFixed(2),
+      shaderMs: (diagAccum.shader / diagFrames).toFixed(2),
+      bloomMs: (diagAccum.bloom / diagFrames).toFixed(2),
+      outputMs: (diagAccum.output / diagFrames).toFixed(2),
+      controlsMs: (diagAccum.controls / diagFrames).toFixed(2),
+      audioMs: (diagAccum.audio / diagFrames).toFixed(2),
+      hudMs: (diagAccum.hud / diagFrames).toFixed(2)
+    };
+    window.__PERF_METRICS__ = metrics;
+    console.log('[PERF_DIAG]', metrics);
+    fetch(`http://${window.location.hostname}:5175/diag`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(metrics)
+    }).catch(() => {});
+
+    diagFrames = 0;
+    diagLastTime = nowTime;
+    for (const k in diagAccum) diagAccum[k] = 0;
+  }
 
   // Dismiss preloader smoothly once textures are active and 3 clean frames are presented
   if (isAppReady && renderedFrames < 3) {
