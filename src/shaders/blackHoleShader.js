@@ -132,8 +132,9 @@ export const BlackHoleShader = {
       // Photographic Deep Space Skybox (Pure authentic astrophotography, no artificial stars)
       vec3 mw = texture2D(uMilkyWay, uv).rgb;
 
-      // Contrast +20% (pivot around midpoint)
-      vec3 contrasted = clamp((mw - vec3(0.5)) * 1.20 + vec3(0.5), 0.0, 1.0);
+      // Smooth continuous tone-curve (no hard black threshold cutoff):
+      // Preserves subpixel Gaussian skirts of stars so they fade continuously without popping/flickering
+      vec3 contrasted = clamp(pow(mw, vec3(1.35)) * 1.15, 0.0, 1.0);
 
       // Brightness -15%
       vec3 skyCol = contrasted * (uSkyBrightness * 0.85);
