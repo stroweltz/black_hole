@@ -70,8 +70,19 @@ if (urlParams.has('camX') && urlParams.has('camY') && urlParams.has('camZ')) {
 // --- Space Flight Controls (WASD Flight + 360° Free Mouse Look) ---
 const controls = new SpaceFlightControls(camera, renderer.domElement);
 
+// --- Preloader & Asset Loading Manager ---
+const preloaderStatus = document.getElementById('preloader-status');
+const preloaderBarFill = document.getElementById('preloader-bar-fill');
+
+const loadingManager = new THREE.LoadingManager();
+loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+  const percent = Math.min(75, Math.round((itemsLoaded / itemsTotal) * 75));
+  if (preloaderBarFill) preloaderBarFill.style.width = `${percent}%`;
+  if (preloaderStatus) preloaderStatus.textContent = `Загрузка астрофизических данных: ${percent}%`;
+};
+
 // --- Skybox Textures: Milky Way + Pinpoint Stars ---
-const texLoader = new THREE.TextureLoader();
+const texLoader = new THREE.TextureLoader(loadingManager);
 
 const milkyWayTex = texLoader.load('./milkyway.jpg');
 milkyWayTex.wrapS = THREE.RepeatWrapping;
@@ -485,6 +496,20 @@ function formatKerrDilation(gamma) {
   }
 }
 
+// --- Preloader Dismissal & Safety Timeout ---
+let renderedFrames = 0;
+function hidePreloader() {
+  const preloader = document.getElementById('preloader');
+  if (!preloader || preloader.classList.contains('fade-out')) return;
+  preloader.classList.add('fade-out');
+  setTimeout(() => {
+    if (preloader.parentNode) preloader.parentNode.removeChild(preloader);
+  }, 950);
+}
+
+// Fallback safety timeout ensures preloader never gets stuck if tab was initially in background
+setTimeout(hidePreloader, 4000);
+
 function animate() {
   requestAnimationFrame(animate);
 
@@ -589,13 +614,27 @@ function animate() {
 
   // Render with post-processing
   composer.render();
+
+  // Dismiss preloader smoothly once the first 2 frames are cleanly presented on the canvas
+  if (renderedFrames <= 2) {
+    renderedFrames++;
+    if (renderedFrames >= 2) {
+      requestAnimationFrame(hidePreloader);
+    }
+  }
 }
+
+
 
 // --- Shader Precompilation & GPU Warmup ---
 // Precompile all shaders and render 1 warm-up frame before animation starts to eliminate runtime stutter
 try {
+  if (preloaderStatus) preloaderStatus.textContent = 'Компиляция релятивистских шейдеров...';
+  if (preloaderBarFill) preloaderBarFill.style.width = '88%';
   renderer.compile(scene, camera);
   composer.render(0);
+  if (preloaderBarFill) preloaderBarFill.style.width = '100%';
+  if (preloaderStatus) preloaderStatus.textContent = 'Горизонт событий стабилизирован';
 } catch (e) {
   console.warn('Precompile warm-up bypassed:', e);
 }
