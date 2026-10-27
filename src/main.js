@@ -73,11 +73,40 @@ const controls = new SpaceFlightControls(camera, renderer.domElement);
 // --- Skybox Textures: Milky Way + Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader();
 
-const milkyWayTex = texLoader.load('./milkyway.jpg');
+// Seamless Canvas Pre-filtering: eliminates single-pixel star scintillation with 0 GPU shader overhead
+const mwCanvas = document.createElement('canvas');
+mwCanvas.width = 2;
+mwCanvas.height = 2;
+const milkyWayTex = new THREE.CanvasTexture(mwCanvas);
 milkyWayTex.wrapS = THREE.RepeatWrapping;
 milkyWayTex.wrapT = THREE.ClampToEdgeWrapping;
 milkyWayTex.minFilter = THREE.LinearFilter;
 milkyWayTex.magFilter = THREE.LinearFilter;
+
+const rawMilkyWay = new Image();
+rawMilkyWay.src = './milkyway.jpg';
+rawMilkyWay.onload = () => {
+  const pad = 16;
+  const w = rawMilkyWay.width;
+  const h = rawMilkyWay.height;
+
+  // Seamless horizontal periodic wrapping to prevent longitude seam
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = w + pad * 2;
+  tempCanvas.height = h;
+  const tCtx = tempCanvas.getContext('2d');
+  tCtx.drawImage(rawMilkyWay, pad, 0);
+  tCtx.drawImage(rawMilkyWay, w - pad, 0, pad, h, 0, 0, pad, h);
+  tCtx.drawImage(rawMilkyWay, 0, 0, pad, h, w + pad, 0, pad, h);
+
+  mwCanvas.width = w;
+  mwCanvas.height = h;
+  const ctx = mwCanvas.getContext('2d');
+  ctx.filter = 'blur(0.85px)';
+  ctx.drawImage(tempCanvas, -pad, 0);
+
+  milkyWayTex.needsUpdate = true;
+};
 
 const starsTex = texLoader.load('./stars.png');
 starsTex.wrapS = THREE.RepeatWrapping;
