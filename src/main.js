@@ -6,7 +6,6 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
-import { NeuralBlackHoleShader, neuralWeightsTexture } from './shaders/neuralShader.js';
 import { CosmicAudio } from './audio.js';
 import UTIF from './utils/utif.js';
 
@@ -104,24 +103,6 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
   },
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
-  side: THREE.BackSide,
-  depthWrite: false,
-  depthTest: false
-});
-
-const neuralMaterial = new THREE.ShaderMaterial({
-  glslVersion: NeuralBlackHoleShader.glslVersion,
-  uniforms: {
-    uTime: { value: 0.0 },
-    uCameraPos: { value: new THREE.Vector3() },
-    uDiskSpeed: { value: 0.85 },
-    uBloomGlow: { value: 1.0 },
-    uMilkyWay: { value: milkyWayTex },
-    uSkyBrightness: { value: 0.38 },
-    uNeuralWeights: { value: neuralWeightsTexture }
-  },
-  vertexShader: NeuralBlackHoleShader.vertexShader,
-  fragmentShader: NeuralBlackHoleShader.fragmentShader,
   side: THREE.BackSide,
   depthWrite: false,
   depthTest: false
@@ -296,21 +277,6 @@ if (sliderSpeed) {
     diskSpeedMultiplier = parseFloat(e.target.value);
     if (speedVal) speedVal.textContent = diskSpeedMultiplier.toFixed(1) + 'x';
     blackHoleMaterial.uniforms.uDiskSpeed.value = diskSpeedMultiplier;
-    neuralMaterial.uniforms.uDiskSpeed.value = diskSpeedMultiplier;
-  });
-}
-
-const btnNeuralToggle = document.getElementById('btn-neural-toggle');
-let isNeuralMode = false;
-
-if (btnNeuralToggle) {
-  btnNeuralToggle.addEventListener('click', () => {
-    isNeuralMode = !isNeuralMode;
-    blackHoleMesh.material = isNeuralMode ? neuralMaterial : blackHoleMaterial;
-    btnNeuralToggle.classList.toggle('active', isNeuralMode);
-    showToast(isNeuralMode 
-      ? '🧠 Режим нейросети (инференс 0.3 мс)' 
-      : '🌀 Численный интегратор ОТО (100 шагов)');
   });
 }
 
@@ -360,7 +326,6 @@ function applySkyboxTexture(texture, name) {
   texture.needsUpdate = true;
 
   blackHoleMaterial.uniforms.uMilkyWay.value = texture;
-  neuralMaterial.uniforms.uMilkyWay.value = texture;
   if (btnUploadBg) {
     btnUploadBg.classList.add('active');
     btnUploadBg.title = `Загружена панорама: ${name}`;
@@ -621,12 +586,6 @@ function animate() {
   // Update uniforms
   blackHoleMaterial.uniforms.uTime.value = simTime;
   blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
-
-  if (isNeuralMode) {
-    neuralMaterial.uniforms.uTime.value = simTime;
-    neuralMaterial.uniforms.uCameraPos.value.copy(camera.position);
-    neuralMaterial.uniforms.uBloomGlow.value = blackHoleMaterial.uniforms.uBloomGlow.value;
-  }
 
   // Render with post-processing
   composer.render();
