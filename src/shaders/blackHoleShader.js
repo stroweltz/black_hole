@@ -129,8 +129,17 @@ export const BlackHoleShader = {
       float theta = asin(clamp(skyDir.y, -1.0, 1.0));
       vec2 uv = vec2(phi / TWO_PI + 0.5, theta / PI + 0.5);
 
-      // Photographic Deep Space Skybox (Pure authentic astrophotography, no artificial stars)
-      vec3 mw = texture2D(uMilkyWay, uv).rgb;
+      // Isotropic angular sub-texel footprint:
+      // Broadens 1-pixel Dirac star spikes just enough to satisfy the Nyquist sampling theorem
+      // during camera rotation, preventing temporal scintillation without any motion blur.
+      float cosTheta = max(cos(theta), 0.18);
+      vec2 dUV = vec2((0.75 / 6000.0) / cosTheta, 0.75 / 3000.0);
+
+      vec3 mw = 0.36 * texture2D(uMilkyWay, uv).rgb
+              + 0.16 * (texture2D(uMilkyWay, uv + vec2( dUV.x,  dUV.y)).rgb +
+                        texture2D(uMilkyWay, uv + vec2(-dUV.x,  dUV.y)).rgb +
+                        texture2D(uMilkyWay, uv + vec2( dUV.x, -dUV.y)).rgb +
+                        texture2D(uMilkyWay, uv + vec2(-dUV.x, -dUV.y)).rgb);
 
       // Smooth continuous tone-curve (no hard black threshold cutoff):
       // Preserves subpixel Gaussian skirts of stars so they fade continuously without popping/flickering
