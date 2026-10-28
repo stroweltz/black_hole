@@ -12,7 +12,8 @@ export const BlackHoleShader = {
     uPlanetPos: { value: null },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
-    uSkyBrightness: { value: 0.65 }
+    uStars: { value: null },
+    uSkyBrightness: { value: 0.42 }
   },
 
   vertexShader: `
@@ -36,6 +37,7 @@ export const BlackHoleShader = {
     uniform vec3 uPlanetPos;
     uniform float uEmbersVisible;
     uniform sampler2D uMilkyWay;
+    uniform sampler2D uStars;
     uniform float uSkyBrightness;
 
     #define PI 3.141592653589793
@@ -113,9 +115,7 @@ export const BlackHoleShader = {
     }
 
     // --- Photographic Deep Space Skybox (Milky Way + Pinpoint Stars) ---
-    // Smooth anti-aliased celestial sampling using analytical LOD bias based on gravitational deflection
-    // Eliminates sub-pixel star shimmering/flickering near lensed photon ring without branch-divergent dFdx
-    vec3 getSkybox(vec3 dir, float deflection) {
+    vec3 getSkybox(vec3 dir) {
       // Rotate celestial sphere coordinates so the Milky Way band crosses gracefully
       // and deep black space with stars surrounds the black hole
       mat3 rotSky = mat3(
@@ -129,70 +129,72 @@ export const BlackHoleShader = {
       float theta = asin(clamp(skyDir.y, -1.0, 1.0));
       vec2 uv = vec2(phi / TWO_PI + 0.5, theta / PI + 0.5);
 
-      // In asymptotically flat space: lodBias = 0 (pristine, sharp pinpoint stars)
-      // When space is curved/deflected: deflection compresses celestial field, smoothly blend mip levels 1-3 to prevent strobe flickering
-      float lodBias = clamp(log2(1.0 + 20.0 * deflection), 0.0, 3.5);
-      vec3 mw = texture2D(uMilkyWay, uv, lodBias).rgb;
-      vec3 skyCol = mw * uSkyBrightness;
+      // Isotropic angular sub-texel footprint:
+      // Broadens 1-pixel Dirac star spikes just enough to satisfy the Nyquist sampling theorem
+      // during camera rotation, preventing temporal scintillation without any motion blur.
+      float cosTheta = max(cos(theta), 0.18);
+      vec2 dUV = vec2((0.75 / 6000.0) / cosTheta, 0.75 / 3000.0);
+
+      vec3 mw = 0.36 * texture2D(uMilkyWay, uv).rgb
+              + 0.16 * (texture2D(uMilkyWay, uv + vec2( dUV.x,  dUV.y)).rgb +
+                        texture2D(uMilkyWay, uv + vec2(-dUV.x,  dUV.y)).rgb +
+                        texture2D(uMilkyWay, uv + vec2( dUV.x, -dUV.y)).rgb +
+                        texture2D(uMilkyWay, uv + vec2(-dUV.x, -dUV.y)).rgb);
+
+      // Smooth continuous tone-curve (no hard black threshold cutoff):
+      // Preserves subpixel Gaussian skirts of stars so they fade continuously without popping/flickering
+      vec3 contrasted = clamp(pow(mw, vec3(1.35)) * 1.15, 0.0, 1.0);
+
+      // Brightness -15%
+      vec3 skyCol = contrasted * (uSkyBrightness * 0.85);
 
       return skyCol;
     }
 
     // --- Physical Accretion Disk Model with Gravitationally Lensed Dust ---
     const float rs = 1.0;            // Schwarzschild radius
-    const float r_eh = 1.002;        // Event Horizon cutoff (positioned safely inside minRadius = 1.015)
+    const float r_eh = 1.005;        // Event Horizon cutoff (allows razor-edge skim at r = 1.015 Rs)
     const float r_in = 2.48;         // Inner disk edge
     const float r_out = 10.2;        // Outer disk edge
 
-    vec4 sampleDisk(vec3 pos, vec3 rayDir, vec3 initDir, float pixSpread) {
+    vec4 sampleDisk(vec3 pos, vec3 rayDir) {
       float r = length(pos.xz);
       if (r < r_in || r > r_out) return vec4(0.0);
 
       float normR = (r - r_in) / (r_out - r_in);
 
-      // True Astrophysical Spiral Density Waves (Lin-Shu Density Wave Theory)
-      // Logarithmic spiral pitch k * log(r / r_in) rotates smoothly at disk speed.
-      // Mathematical guarantee: radial gradient is CONSTANT in time and NEVER winds into vinyl record stripes!
-      float phi = atan(pos.z, pos.x);
-      float spiralPitch = 2.4 * log(r / r_in);
-      float rotAngle = phi - mod(uTime * uDiskSpeed * 0.42, TWO_PI) + spiralPitch;
+      // Differential Keplerian rotation with initial shear phase:
+      // Delicate filamentary spirals and organic dust strands are visible immediately from second 1,
+      // while smooth saturation prevents winding into sub-pixel moire or artificial harmonic stripes.
+      float effShearTime = 25.0 + min(uTime, 95.0) * 0.65;
+      float omega = 2.8 / pow(r, 1.35);
+      float rotAngle = effShearTime * uDiskSpeed * 0.45 * omega + mod(uTime * 0.12, TWO_PI);
+      float cosA = cos(rotAngle);
+      float sinA = sin(rotAngle);
+      vec2 rotPos = mat2(cosA, -sinA, sinA, cosA) * pos.xz;
 
-      vec2 rotPos = vec2(r * cos(rotAngle), r * sin(rotAngle));
-
-      // Organic turbulent plasma flow & filaments
-      float turbulence1 = fbm3D(vec3(rotPos * 0.55, r * 0.25 + mod(uTime * 0.05, 1000.0)));
-      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.45, r * 0.65 - mod(uTime * 0.07, 1000.0)));
+      // Pure organic multi-scale turbulence without artificial harmonic sine grooves
+      float turbulence1 = fbm3D(vec3(rotPos * 0.65, r * 0.35 + mod(uTime * 0.04, 1000.0)));
+      float turbulence2 = fbm3D_fast(vec3(rotPos * 1.85, r * 0.95 - mod(uTime * 0.06, 1000.0)));
       float plasmaNoise = turbulence1 * 0.65 + turbulence2 * 0.35;
 
-      // Gentle natural dust lanes (NO artificial high-frequency sine grooves)
-      float dustWhisps = smoothstep(0.20, 0.75, turbulence1 * 0.8 + 0.2 * sin(rotAngle * 2.0));
-
-      float structure = 0.65 + 0.50 * (plasmaNoise - 0.45);
-      structure *= (0.72 + 0.28 * dustWhisps);
+      // Natural filamentary dust lanes and turbulent clusters
+      float dustWhisps = smoothstep(0.24, 0.72, turbulence1 * 0.75 + turbulence2 * 0.25);
+      float structure = 0.68 + 0.42 * (plasmaNoise - 0.5);
+      structure *= (0.70 + 0.30 * dustWhisps);
       structure = clamp(structure, 0.25, 1.4);
 
       // --- Microscopic Dust Embers (Seamless Cartesian Rotation, Lensed & Occluded) ---
       float emberSparkle = 0.0;
       if (uEmbersVisible > 0.5) {
-        // Analytical pixel footprint estimation on disk calculated without branch-divergent fwidth:
-        // Evaluates ray divergence (pixSpread computed uniformly outside loop), distance to camera,
-        // inclination angle, and gravitational geodesic deflection.
-        // Smoothly attenuates high-frequency sub-pixel sparkling & flickering on compressed secondary lensed images.
-        float distToCam = length(pos - uCameraPos);
-        float deflection = 1.0 - dot(initDir, rayDir);
-        float pixelFootprint = (distToCam * pixSpread / max(abs(rayDir.y), 0.05)) * (1.0 + 8.0 * deflection);
-        float emberFade = 1.0 - smoothstep(0.04, 0.12, pixelFootprint);
-
-        if (emberFade > 0.001) {
-          vec2 emberGrid = rotPos * 7.5;
-          vec2 cell = floor(emberGrid);
-          float h = hash(cell);
-          if (h > 0.92) {
-            vec2 delta = fract(emberGrid) - 0.5;
-            float distSq = dot(delta, delta);
-            float twinkle = 0.65 + 0.35 * sin(mod(uTime * 6.5, TWO_PI) + h * 38.0);
-            emberSparkle = exp(-distSq * 36.0) * twinkle * 1.35 * emberFade;
-          }
+        vec2 emberGrid = rotPos * 8.5;
+        vec2 cell = floor(emberGrid);
+        float h = hash(cell);
+        if (h > 0.92) {
+          vec2 delta = fract(emberGrid) - 0.5;
+          float distSq = dot(delta, delta);
+          float twinkle = 0.65 + 0.35 * sin(uTime * 6.5 + h * 38.0);
+          emberSparkle = exp(-distSq * 36.0) * twinkle * 1.35;
         }
       }
 
@@ -201,15 +203,9 @@ export const BlackHoleShader = {
       float outerFade = smoothstep(r_out, r_out - 2.5, r);
       float radialProfile = innerCut * outerFade;
 
-      // Vertical thickness falloff & physical optical path length
-      // 1. Avoid GLSL pow(negative, 2.0) undefined behavior: exp(-t*t)
-      // 2. Optical depth through Gaussian vertical slab rho(y) = exp(-(y/H)^2):
-      //    Path integral along ray = halfThickness * sqrt(PI) / max(abs(rayDir.y), 0.05)
-      //    Grazing rays traverse longer paths through glowing gas, producing luminous edge glow.
+      // Vertical thickness falloff
       float halfThickness = 0.032 * r;
-      float t = pos.y / max(halfThickness, 0.001);
-      float pathLength = (halfThickness * 1.77245385) / max(abs(rayDir.y), 0.05);
-      float verticalFade = exp(-t * t) * pathLength;
+      float verticalFade = exp(-pow(pos.y / max(halfThickness, 0.001), 2.0));
 
       // Relativistic Doppler Beaming
       vec3 orbDir = normalize(vec3(-pos.z, 0.0, pos.x));
@@ -244,20 +240,17 @@ export const BlackHoleShader = {
         diskCol = mix(diskCol, cRed * 0.8, clamp(-cosTheta * 0.5, 0.0, 0.75));
       }
 
-      // Physical clearing / displacement by Miller's Planet:
-      // The solid planet body clears and displaces accretion plasma within its volume
+      // Physical clearing / displacement by Miller's Planet
       float planetCutout = 1.0;
       if (uPlanetVisible > 0.5) {
         vec3 toP = pos - uPlanetPos;
-        float dPlanet2 = dot(toP, toP);
-        if (dPlanet2 < 0.0484) return vec4(0.0); // 0.22 * 0.22
-        if (dPlanet2 < 0.0784) {                 // 0.28 * 0.28
-          planetCutout = smoothstep(0.22, 0.28, sqrt(dPlanet2));
-        }
+        float dP2 = dot(toP, toP);
+        if (dP2 < 0.0484) return vec4(0.0);
+        if (dP2 < 0.0784) planetCutout = smoothstep(0.22, 0.28, sqrt(dP2));
       }
 
       float density = (structure + emberSparkle) * radialProfile * verticalFade * planetCutout;
-      float alpha = clamp(density * 1.15, 0.0, 1.0);
+      float alpha = clamp(density * 0.95, 0.0, 0.98);
       
       vec3 emission = diskCol * density * beaming * 1.55 * uBloomGlow;
 
@@ -287,15 +280,15 @@ export const BlackHoleShader = {
       vec3 pLightCol = vec3(1.25, 1.05, 0.85); // disk sunlight
       vec3 atmoCol = vec3(0.35, 0.65, 0.95);   // azure atmosphere
 
-      return surfCol * (diff * pLightCol + ambient * vec3(0.2, 0.25, 0.35))
-           + spec * 1.8 * pLightCol
-           + fresnel * 0.65 * atmoCol;
+      vec3 finalPlanetCol = surfCol * (diff * pLightCol + ambient * vec3(0.2, 0.25, 0.35))
+                          + spec * 1.8 * pLightCol
+                          + fresnel * 0.65 * atmoCol;
+      return finalPlanetCol;
     }
 
     void main() {
       // Ray begins directly at the camera position in world space
       vec3 localRayDir = normalize(vWorldPosition - uCameraPos);
-      float pixSpread = length(fwidth(localRayDir));
       vec3 rayPos = uCameraPos;
       float camDist = length(rayPos);
 
@@ -310,35 +303,21 @@ export const BlackHoleShader = {
       vec3 perpComp = localRayDir - radComp * radUnit;
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
-      vec3 initRayDir = rayDir;
-
-      // Conserved Relativistic Angular Momentum h^2 = |r x v|^2 for geodesic integration
-      vec3 hv = cross(rayPos, rayDir);
-      float h2 = dot(hv, hv);
-
-      // Geodesic Plane Pre-Culling for Miller's Planet
-      // In Schwarzschild spacetime, every photon geodesic lies in a fixed central plane with normal hv = r x v.
-      // The perpendicular distance from the planet center to the ray's orbital plane is abs(dot(uPlanetPos, hv)) / |hv|.
-      // If this distance exceeds the planet bounding influence radius (1.05, ~5x planet radius 0.22),
-      // the ray can mathematically NEVER intersect or approach the planet.
-      bool canHitPlanet = false;
-      if (uPlanetVisible > 0.5 && h2 > 1e-6) {
-        float distToPlanetPlane = abs(dot(uPlanetPos, hv)) * inversesqrt(h2);
-        canHitPlanet = (distToPlanetPlane < 1.05);
-      }
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
+      float minRadius = 1e6;
       bool hitHorizon = false;
-      bool escaped = false;
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Optimized for high performance and seamless whole-space relativistic integration
-      const int MAX_STEPS = 90;
+      const int MAX_STEPS = 100;
       vec3 prevPos = rayPos;
-      float r = camDist;
 
       for (int i = 0; i < MAX_STEPS; i++) {
+        float r = length(rayPos);
+        minRadius = min(minRadius, r);
+
         // 1. Event Horizon hit: light is completely captured into the singularity
         if (r <= r_eh) {
           hitHorizon = true;
@@ -347,56 +326,57 @@ export const BlackHoleShader = {
 
         // 2. Seamless exit: ray is beyond outer disk (r_out = 10.2) and escaping into asymptotically flat space
         if (r > 13.0 && dot(rayPos, rayDir) > 0.0) {
-          escaped = true;
           break;
         }
 
-        // 3. Gravitationally Lensed Miller's Planet & Accretion Disk Segment Intersections
+        // 3. Planet pre-cull & segment hit detection
+        vec3 seg = rayPos - prevPos;
+        float segLen = length(seg);
+        vec3 segDir = (segLen > 1e-5) ? (seg / segLen) : rayDir;
+
         bool hitPlanetThisStep = false;
         float tHitPlanet = 1e6;
         vec3 pHitPos = vec3(0.0);
-        vec3 pNorm = vec3(0.0);
-        vec3 pViewDir = rayDir;
-        float segLen = 0.0;
+        vec3 pNorm = vec3(0.0, 1.0, 0.0);
+        vec3 pViewDir = segDir;
 
-        if (canHitPlanet && i > 0 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
-          vec3 toP = prevPos - uPlanetPos;
-          float toP2 = dot(toP, toP);
-          if (toP2 < 2.0) {
-            vec3 seg = rayPos - prevPos;
-            segLen = length(seg);
-            if (segLen > 1e-5) {
-              vec3 segDir = seg / segLen;
-              float pRad = 0.22;
-              float boundR = segLen + pRad + 0.35;
-              if (toP2 < boundR * boundR) {
-                float b = dot(toP, segDir);
-                float c = toP2 - pRad * pRad;
-                float discr = b * b - c;
-                if (discr >= 0.0) {
-                  float sqrtD = sqrt(discr);
-                  float t1 = -b - sqrtD;
-                  if (c < 0.0) {
-                    // Ray penetrated inside planet volume: register immediate surface hit without tunneling
-                    tHitPlanet = 0.0;
-                    hitPlanetThisStep = true;
-                    pHitPos = prevPos;
-                    pNorm = normalize(pHitPos - uPlanetPos);
-                    pViewDir = segDir;
-                  } else if (t1 >= 0.0 && t1 <= segLen) {
-                    tHitPlanet = t1;
-                    hitPlanetThisStep = true;
-                    pHitPos = prevPos + segDir * t1;
-                    pNorm = normalize(pHitPos - uPlanetPos);
-                    pViewDir = segDir;
-                  }
+        // Geodesic orbital plane invariant pre-cull
+        vec3 currH = cross(rayPos, rayDir);
+        float currH2 = dot(currH, currH);
+        bool canHitPlanet = (uPlanetVisible > 0.5) && (abs(dot(uPlanetPos, currH)) / max(sqrt(currH2), 1e-4) < 0.55);
+
+        if (canHitPlanet && i > 0 && segLen > 1e-5) {
+          if (abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
+            vec3 toP = prevPos - uPlanetPos;
+            float toP2 = dot(toP, toP);
+            float pRad = 0.22;
+            float boundR = segLen + pRad + 0.35;
+            if (toP2 < boundR * boundR) {
+              float b = dot(toP, segDir);
+              float c = toP2 - pRad * pRad;
+              float discr = b * b - c;
+              if (discr >= 0.0) {
+                float sqrtD = sqrt(discr);
+                float t1 = -b - sqrtD;
+                if (c < 0.0) {
+                  tHitPlanet = 0.0;
+                  hitPlanetThisStep = true;
+                  pHitPos = prevPos;
+                  pNorm = normalize(pHitPos - uPlanetPos);
+                  pViewDir = segDir;
+                } else if (t1 >= 0.0 && t1 <= segLen) {
+                  tHitPlanet = t1;
+                  hitPlanetThisStep = true;
+                  pHitPos = prevPos + segDir * t1;
+                  pNorm = normalize(pHitPos - uPlanetPos);
+                  pViewDir = segDir;
                 }
               }
             }
           }
         }
 
-        // Equatorial disk plane crossing (y = 0)
+        // 4. Equatorial disk plane crossing (y = 0)
         bool hitDiskThisStep = false;
         float tHitDisk = 1e6;
         vec3 hitPosDisk = vec3(0.0);
@@ -416,14 +396,12 @@ export const BlackHoleShader = {
         // Strictly depth-sorted evaluation along ray segment:
         if (hitPlanetThisStep && hitDiskThisStep) {
           if (tHitPlanet <= tHitDisk) {
-            // Planet is in front of disk crossing: planet fully occludes disk behind it!
             vec3 pCol = shadePlanet(pNorm, pViewDir, uPlanetPos, uTime);
             accumColor += (1.0 - accumAlpha) * pCol;
             accumAlpha = 1.0;
             break;
           } else {
-            // Disk crossing is in front of planet: sample disk first, then planet behind
-            vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir), initRayDir, pixSpread);
+            vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir));
             if (diskSamp.a > 0.001) {
               accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
               accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
@@ -441,7 +419,7 @@ export const BlackHoleShader = {
           accumAlpha = 1.0;
           break;
         } else if (hitDiskThisStep) {
-          vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir), initRayDir, pixSpread);
+          vec4 diskSamp = sampleDisk(hitPosDisk, normalize(rayDir));
           if (diskSamp.a > 0.001) {
             accumColor += (1.0 - accumAlpha) * diskSamp.rgb;
             accumAlpha += (1.0 - accumAlpha) * diskSamp.a;
@@ -449,21 +427,17 @@ export const BlackHoleShader = {
           }
         }
 
-        // 4. Smooth continuous multi-scale step size:
-        // Far away (r > 6.0): flat/weak field, take larger steps to escape quickly.
-        // Intermediate (2.0 < r <= 6.0): fine symplectic steps for sharp lensing.
-        // Extreme proximity (r <= 2.0): ultra-fine symplectic sub-stepping proportional to distance from horizon!
+        // 5. Smooth continuous multi-scale step size:
         float stepSize;
         if (r > 6.0) {
           stepSize = 0.45 + 0.12 * (r - 6.0);
         } else if (r > 2.0) {
           stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
-          stepSize = clamp(0.28 * (r - r_eh) + 0.004, 0.003, 0.16);
+          stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
         }
 
         // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
-        // Prevents tunneling, eliminates mesh-crossing artifacts, and guarantees silky smooth silhouettes
         if (canHitPlanet) {
           vec3 toPlanet = rayPos - uPlanetPos;
           float dP2 = dot(toPlanet, toPlanet);
@@ -474,34 +448,21 @@ export const BlackHoleShader = {
         }
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
-        // Conserves angular momentum h^2 = |r x v|^2 exactly without artificial renormalization
+        // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
         vec3 halfPos = rayPos + rayDir * (stepSize * 0.5);
-        float inv = inversesqrt(dot(halfPos, halfPos));
-        float inv5 = inv * inv * inv * inv * inv;
-        vec3 accel = - 1.5 * rs * h2 * inv5 * halfPos;
+        float halfR = length(halfPos);
+        vec3 hVec = cross(halfPos, rayDir);
+        float h2 = dot(hVec, hVec);
+        vec3 accel = - 1.5 * rs * (h2 / (pow(halfR, 5.0) + 1e-5)) * halfPos;
 
         rayDir = normalize(rayDir + accel * stepSize);
         prevPos = rayPos;
         rayPos = halfPos + rayDir * (stepSize * 0.5);
-        r = length(rayPos);
       }
 
       // Gravitationally lensed deep space skybox
-      // Only rays that successfully escaped past r > 13 sample the celestial sphere.
-      // Rays trapped near the horizon or photon sphere that exhaust MAX_STEPS are treated as captured (black void).
-      if (!hitHorizon && escaped && accumAlpha < 1.0) {
-        // Analytical weak-field tail continuation from escape position to infinity:
-        // Eliminates step-count discretization rings ("слоение неба") and boundary cuts
-        // by smoothly integrating the remaining gravitational deflection from r to infinity.
-        float radProj = dot(rayPos, rayDir);
-        float cosA = clamp(radProj / max(r, 1e-4), -1.0, 1.0);
-        vec3 bVec = rayPos - radProj * rayDir;
-        float bSq = dot(bVec, bVec);
-        float tailFactor = max(0.0, 1.0 - (3.0 * cosA - cosA * cosA * cosA) * 0.5);
-        vec3 finalRayDir = normalize(rayDir - bVec * (rs / max(bSq, 0.04) * tailFactor));
-
-        float deflection = 1.0 - dot(initRayDir, finalRayDir);
-        vec3 sky = getSkybox(finalRayDir, deflection);
+      if (!hitHorizon && accumAlpha < 1.0) {
+        vec3 sky = getSkybox(rayDir);
         accumColor += (1.0 - accumAlpha) * sky;
       }
 

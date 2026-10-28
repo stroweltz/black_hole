@@ -4,16 +4,10 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
-import { CosmicAudio, AUDIO_ATTRIBUTION, DEFAULT_AUDIO_URL } from './audio.js';
-import { TRANSLATIONS, getInitialLanguage, saveLanguage } from './i18n.js';
-// UTIF dynamically loaded on demand for custom TIFF panoramas
-
-// --- Current Language State ---
-let currentLang = getInitialLanguage();
-let currentAudioLang = currentLang;
+import { CosmicAudio } from './audio.js';
+import UTIF from './utils/utif.js';
 
 // --- WebGL Support Check ---
 function isWebGLAvailable() {
@@ -26,10 +20,9 @@ function isWebGLAvailable() {
 }
 
 if (!isWebGLAvailable()) {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   const errDiv = document.createElement('div');
   errDiv.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#05070d;color:#f87171;font-family:sans-serif;padding:24px;text-align:center;z-index:99999;';
-  errDiv.innerHTML = `<h2 style="margin-bottom:12px;color:#f1f5f9;">${t.webglTitle}</h2><p style="color:#94a3b8;max-width:480px;line-height:1.5;">${t.webglDesc}</p>`;
+  errDiv.innerHTML = '<h2 style="margin-bottom:12px;color:#f1f5f9;">⚫ Требуется поддержка WebGL</h2><p style="color:#94a3b8;max-width:480px;line-height:1.5;">Ваш браузер или видеокарта в данный момент не поддерживает WebGL. Пожалуйста, включите аппаратное ускорение в настройках браузера или обновите драйвер видеокарты.</p>';
   document.body.appendChild(errDiv);
 }
 
@@ -39,9 +32,23 @@ const canvasContainer = document.getElementById('canvas-container');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Optimal pixel ratio: cap at 1.25 to prevent 4K/5K fillrate bottlenecks on High-DPI displays while keeping 100% sharp visuals
-const targetDPR = Math.min(window.devicePixelRatio || 1.0, 0.85);
-renderer.setPixelRatio(targetDPR);
+// Mobile & Touch Device Detection (Portrait + Landscape mobile screens)
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
+const isMobileDevice = isTouchDevice || (window.innerWidth <= 900) || (window.innerHeight <= 520);
+const isMobile = isMobileDevice;
+
+function getOptimalDPR() {
+  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
+  // Cap at 1.0 on mobile to guarantee smooth 60 FPS raymarching while retaining crisp visuals
+  return Math.min(window.devicePixelRatio || 1.0, mobile ? 1.0 : 1.25);
+}
+
+function getBloomScale() {
+  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
+  return mobile ? 0.35 : 0.5;
+}
+
+renderer.setPixelRatio(getOptimalDPR());
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 canvasContainer.appendChild(renderer.domElement);
@@ -74,28 +81,45 @@ if (urlParams.has('camX') && urlParams.has('camY') && urlParams.has('camZ')) {
   }
 }
 
-// --- Space Flight Controls (WASD Flight + 360° Free Mouse Look) ---
+// --- Space Flight Controls (WASD / Touch Flight + 360° Free Look) ---
 const controls = new SpaceFlightControls(camera, renderer.domElement);
+window.controls = controls;
+window.camera = camera;
 
-// --- Skybox Textures: Milky Way + Pinpoint Stars ---
-const texLoader = new THREE.TextureLoader();
-
-// Helper to configure celestial skybox textures with correct color space, mipmaps, and anisotropy
-function configureSkyboxTexture(tex) {
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.needsUpdate = true;
-  return tex;
+// Dynamic touch hint for mobile users
+const controlsHint = document.getElementById('controls-hint');
+if (controlsHint && (isTouchDevice || isMobileDevice)) {
+  controlsHint.innerHTML = `
+    <span class="mouse-icon">🚀</span>
+    <span><strong>1 палец</strong> — обзор 360° • <strong>2 пальца</strong> — зум / тяга • <strong>Джойстик</strong> — полёт</span>
+  `;
 }
 
-// Initial placeholder texture to construct shader material safely before asset stream completes
-const placeholderTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
-placeholderTex.colorSpace = THREE.SRGBColorSpace;
-placeholderTex.needsUpdate = true;
+// --- Preloader & Asset Loading Manager ---
+const preloaderStatus = document.getElementById('preloader-status');
+const preloaderBarFill = document.getElementById('preloader-bar-fill');
+
+const loadingManager = new THREE.LoadingManager();
+loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+  const percent = Math.min(75, Math.round((itemsLoaded / itemsTotal) * 75));
+  if (preloaderBarFill) preloaderBarFill.style.width = `${percent}%`;
+  if (preloaderStatus) preloaderStatus.textContent = `Загрузка астрофизических данных: ${percent}%`;
+};
+
+// --- Skybox Textures: Milky Way + Pinpoint Stars ---
+const texLoader = new THREE.TextureLoader(loadingManager);
+
+const milkyWayTex = texLoader.load('./milkyway.jpg');
+milkyWayTex.wrapS = THREE.RepeatWrapping;
+milkyWayTex.wrapT = THREE.ClampToEdgeWrapping;
+milkyWayTex.minFilter = THREE.LinearFilter;
+milkyWayTex.magFilter = THREE.LinearFilter;
+
+const starsTex = texLoader.load('./stars.png');
+starsTex.wrapS = THREE.RepeatWrapping;
+starsTex.wrapT = THREE.ClampToEdgeWrapping;
+starsTex.minFilter = THREE.LinearFilter;
+starsTex.magFilter = THREE.LinearFilter;
 
 // --- Black Hole Raymarching Mesh ---
 // Sized generously around camera; position follows camera every frame
@@ -109,8 +133,9 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uPlanetVisible: { value: 1.0 },
     uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
-    uMilkyWay: { value: placeholderTex },
-    uSkyBrightness: { value: 0.65 }
+    uMilkyWay: { value: milkyWayTex },
+    uStars: { value: starsTex },
+    uSkyBrightness: { value: 0.38 }
   },
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
@@ -122,13 +147,13 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
 const blackHoleMesh = new THREE.Mesh(boxGeo, blackHoleMaterial);
 scene.add(blackHoleMesh);
 
-// --- Post-Processing (Balanced, Cinematic Bloom & High-Fidelity Anti-Aliasing) ---
+// --- Post-Processing (Balanced, Cinematic Bloom) ---
 const renderScene = new RenderPass(scene, camera);
 
-// Bloom buffer: UnrealBloomPass internally scales blur render targets by 1/2, 1/4, 1/8...
-// Providing full effective buffer dimensions guarantees consistent half-res glow before and after resize
-const bloomWidth = Math.max(256, Math.floor(window.innerWidth * 0.5));
-const bloomHeight = Math.max(256, Math.floor(window.innerHeight * 0.5));
+// Adaptive bloom buffer: 0.35x on mobile for high fillrate, 0.5x on desktop
+const bloomScale = getBloomScale();
+const bloomWidth = Math.max(128, Math.floor(window.innerWidth * bloomScale));
+const bloomHeight = Math.max(128, Math.floor(window.innerHeight * bloomScale));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(bloomWidth, bloomHeight),
   0.42,  // bloom strength
@@ -137,60 +162,17 @@ const bloomPass = new UnrealBloomPass(
 );
 
 const outputPass = new OutputPass();
-const fxaaPass = new FXAAPass();
-fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * targetDPR);
-fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * targetDPR);
 
 const composer = new EffectComposer(renderer);
-composer.setPixelRatio(targetDPR);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 composer.addPass(outputPass);
-composer.addPass(fxaaPass);
-
-// --- Lightweight Performance Diagnostic Profiler ---
-function getGPUInfo() {
-  const gl = renderer.getContext();
-  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-  if (debugInfo) {
-    return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-  }
-  return renderer.capabilities.isWebGL2 ? 'WebGL2 (Generic)' : 'WebGL1 (Generic)';
-}
-
-const diagAccum = {
-  controls: 0,
-  hud: 0,
-  audio: 0,
-  shader: 0,
-  bloom: 0,
-  output: 0,
-  totalFrame: 0
-};
-let diagFrames = 0;
-let diagLastTime = performance.now();
-
-function profilePass(pass, key) {
-  const origRender = pass.render.bind(pass);
-  pass.render = function(r, writeBuffer, readBuffer, deltaTime, maskActive) {
-    const t0 = performance.now();
-    origRender(r, writeBuffer, readBuffer, deltaTime, maskActive);
-    diagAccum[key] += performance.now() - t0;
-  };
-}
-
-profilePass(renderScene, 'shader');
-profilePass(bloomPass, 'bloom');
-profilePass(outputPass, 'output');
 
 // --- Audio ---
 const cosmicAudio = new CosmicAudio();
-window.cosmicAudio = cosmicAudio;
-cosmicAudio.preload();
 
 // --- State & Animation Parameters ---
 let diskSpeedMultiplier = 0.85;
-let customSkyboxName = null;
 
 // --- Miller's Planet Dynamic Orbit ---
 const planetOrbitRadius = 5.6;
@@ -203,24 +185,24 @@ const PRESETS = {
   ref: {
     pos: new THREE.Vector3(-9.2, 2.7, 11.8),
     target: new THREE.Vector3(1.6, 0.45, 0.0),
-    key: 'toastPresetRef'
+    title: '🎥 Ракурс из фильма (r = 15.2 Rs)'
   },
   orbit: {
     pos: new THREE.Vector3(-4.8, 0.65, 2.8),
     target: new THREE.Vector3(0.0, 0.0, 0.0),
-    key: 'toastPresetOrbit'
+    title: '🪐 Орбита Миллер (r = 5.6 Rs)'
   },
   sphere: {
     pos: new THREE.Vector3(0.0, 0.45, 1.43),
     target: new THREE.Vector3(0.0, 0.0, 0.0),
-    key: 'toastPresetSphere'
+    title: '🌀 Фотонная сфера (r = 1.50 Rs, тень 50% неба)'
   },
   portal: {
-    // Razor-edge event horizon skim: looking radially outward into deep space
+    // Razor-edge horizon boundary (r = 1.018 Rs): looking outward into deep space
     // Relativistic tetrad transformation gathers the entire universe into a sharp circular porthole!
-    pos: new THREE.Vector3(0.0, 0.06, 1.014),
-    target: new THREE.Vector3(0.0, 2.5, 12.0),
-    key: 'toastPresetPortal'
+    pos: new THREE.Vector3(0.0, 0.08, 1.015),
+    target: new THREE.Vector3(0.0, 2.5, 10.2),
+    title: '🕳️ Окно Вселенной (r = 1.018 Rs, тень 97.4% неба)'
   }
 };
 
@@ -228,11 +210,10 @@ function activatePreset(name) {
   const preset = PRESETS[name];
   if (!preset) return;
   controls.resetTo(preset.pos, preset.target);
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  showToast(t[preset.key]);
+  showToast(preset.title);
 
   // Update preset button active states
-  ['orbit', 'sphere', 'portal'].forEach((id) => {
+  ['orbit', 'sphere', 'portal'].forEach(id => {
     const el = document.getElementById(`btn-view-${id}`);
     if (el) el.classList.toggle('active', id === name);
   });
@@ -262,19 +243,18 @@ const metricLabel = document.getElementById('metric-label');
 if (btnMetricToggle) {
   btnMetricToggle.addEventListener('click', () => {
     isKerrMetric = !isKerrMetric;
-    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
     if (isKerrMetric) {
       btnMetricToggle.classList.add('active');
       if (metricIcon) metricIcon.textContent = '🌀';
-      if (metricLabel) metricLabel.textContent = t.metricKerrText;
-      if (telemetryTitle) telemetryTitle.textContent = t.telemetryTitleKerr;
-      showToast(t.toastMetricKerr, 3500);
+      if (metricLabel) metricLabel.textContent = 'Керр (вращение)';
+      if (telemetryTitle) telemetryTitle.textContent = 'ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)';
+      showToast('🌀 Метрика Керра: вращающаяся Гаргантюа (1 ч = 7 лет на Миллере)', 3500);
     } else {
       btnMetricToggle.classList.remove('active');
       if (metricIcon) metricIcon.textContent = '⚫';
-      if (metricLabel) metricLabel.textContent = t.metricSchwText;
-      if (telemetryTitle) telemetryTitle.textContent = t.telemetryTitleSchw;
-      showToast(t.toastMetricSchw, 3500);
+      if (metricLabel) metricLabel.textContent = 'Шварцшильд (статика)';
+      if (telemetryTitle) telemetryTitle.textContent = 'ТЕЛЕМЕТРИЯ • ШВАРЦШИЛЬД (СТАТИКА)';
+      showToast('⚫ Метрика Шварцшильда: статическая невращающаяся чёрная дыра', 3500);
     }
   });
 }
@@ -284,35 +264,11 @@ const btnBloom = document.getElementById('btn-bloom');
 const btnParticles = document.getElementById('btn-particles');
 const btnPlanet = document.getElementById('btn-planet');
 const btnAudio = document.getElementById('btn-audio');
-const btnQuickAudio = document.getElementById('btn-quick-audio');
 const btnFullscreen = document.getElementById('btn-fullscreen');
 const sliderSpeed = document.getElementById('slider-speed');
 const speedVal = document.getElementById('speed-val');
 const btnUploadBg = document.getElementById('btn-upload-bg');
 const inputBgFile = document.getElementById('input-bg-file');
-const btnToggleUI = document.getElementById('btn-toggle-ui');
-const btnLangToggle = document.getElementById('btn-lang-toggle');
-
-let uiVisible = true;
-
-function updateToggleUIButton() {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  if (btnToggleUI) {
-    btnToggleUI.title = t.btnToggleUiTitle;
-    const toggleText = btnToggleUI.querySelector('.toggle-text');
-    if (toggleText) {
-      toggleText.textContent = uiVisible ? t.btnToggleUiHide : t.btnToggleUiShow;
-    }
-  }
-}
-
-if (btnToggleUI) {
-  btnToggleUI.addEventListener('click', () => {
-    uiVisible = !uiVisible;
-    document.body.classList.toggle('ui-hidden', !uiVisible);
-    updateToggleUIButton();
-  });
-}
 
 if (btnBloom) {
   let bloomOn = true;
@@ -343,174 +299,13 @@ if (btnPlanet) {
   });
 }
 
-function updateAudioButtons(isPlaying) {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  if (btnAudio) {
+if (btnAudio) {
+  btnAudio.addEventListener('click', () => {
+    const isPlaying = cosmicAudio.toggle();
     btnAudio.classList.toggle('active', isPlaying);
     btnAudio.innerHTML = isPlaying 
-      ? `<span class="icon">🔊</span> ${t.btnAudioOn}` 
-      : `<span class="icon">🔇</span> ${t.btnAudioOff}`;
-  }
-  if (btnQuickAudio) {
-    btnQuickAudio.classList.toggle('active', isPlaying);
-    btnQuickAudio.innerHTML = isPlaying
-      ? `<span class="sound-icon">🔊</span> <span class="sound-text">${t.btnQuickAudioOn}</span>`
-      : `<span class="sound-icon">🔇</span> <span class="sound-text">${t.btnQuickAudioOff}</span>`;
-  }
-}
-
-function handleAudioToggle() {
-  const isPlaying = cosmicAudio.toggle();
-  updateAudioButtons(isPlaying);
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  if (isPlaying) {
-    showToast(t.toastSoundOn, 4500);
-    if (!cosmicAudio.audioBuffer && cosmicAudio.isLoadingAudio) {
-      showToast(t.toastSoundLoading, 3000);
-    }
-  } else {
-    showToast(t.toastSoundOff, 2000);
-  }
-}
-
-if (btnAudio) {
-  btnAudio.addEventListener('click', handleAudioToggle);
-}
-
-if (btnQuickAudio) {
-  btnQuickAudio.addEventListener('click', handleAudioToggle);
-}
-
-const sliderVolume = document.getElementById('slider-volume');
-const volumeVal = document.getElementById('volume-val');
-
-if (sliderVolume) {
-  sliderVolume.addEventListener('input', (e) => {
-    const val = parseInt(e.target.value, 10);
-    if (volumeVal) volumeVal.textContent = `${val}%`;
-    cosmicAudio.setVolume(val / 100);
-  });
-}
-
-// --- Audio Modal & Attribution UI ---
-const modalAudioInfo = document.getElementById('modal-audio-info');
-const btnAudioInfo = document.getElementById('btn-audio-info');
-const btnAudioModalClose = document.getElementById('btn-audio-modal-close');
-const btnAudioLangToggle = document.getElementById('btn-audio-lang-toggle');
-const audioModalTitle = document.getElementById('audio-modal-title');
-const audioModalDesc = document.getElementById('audio-modal-desc');
-const audioModalCredit = document.getElementById('audio-modal-credit');
-const audioSourceStatus = document.getElementById('audio-source-status');
-const btnLoadCustomAudio = document.getElementById('btn-load-custom-audio');
-const inputAudioFile = document.getElementById('input-audio-file');
-const checkAudioComfort = document.getElementById('check-audio-comfort');
-const comfortLabelTitle = document.getElementById('comfort-label-title');
-const comfortModeDesc = document.getElementById('comfort-mode-desc');
-const audioWarningTitle = document.getElementById('audio-warning-title');
-const audioWarningText = document.getElementById('audio-warning-text');
-
-function updateAudioModalUI() {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  const mode = cosmicAudio.sourceMode || 'nasa';
-  const data = (AUDIO_ATTRIBUTION[mode] && AUDIO_ATTRIBUTION[mode][currentLang])
-    ? AUDIO_ATTRIBUTION[mode][currentLang]
-    : AUDIO_ATTRIBUTION.nasa[currentLang];
-
-  if (audioModalTitle) audioModalTitle.textContent = data.title;
-  if (audioModalDesc) audioModalDesc.textContent = data.desc;
-  if (audioModalCredit) {
-    audioModalCredit.textContent = data.credit;
-    audioModalCredit.style.display = data.credit ? 'block' : 'none';
-  }
-  if (audioSourceStatus) {
-    if (mode === 'custom' && cosmicAudio.customFileName) {
-      audioSourceStatus.textContent = t.audioSourceCustom(cosmicAudio.customFileName);
-    } else {
-      audioSourceStatus.textContent = data.sourceBadge;
-    }
-  }
-  if (comfortLabelTitle) comfortLabelTitle.textContent = t.comfortLabelTitle;
-  if (comfortModeDesc) comfortModeDesc.textContent = t.comfortModeDesc;
-  if (audioWarningTitle) audioWarningTitle.textContent = t.audioWarningTitle;
-  if (audioWarningText) audioWarningText.textContent = t.audioWarningText;
-  if (btnAudioLangToggle) {
-    btnAudioLangToggle.textContent = currentLang === 'ru' ? 'EN' : 'RU';
-  }
-  if (btnLoadCustomAudio) {
-    btnLoadCustomAudio.textContent = t.btnLoadCustomAudio;
-  }
-  if (btnAudioModalClose) {
-    btnAudioModalClose.title = t.audioModalCloseTitle;
-  }
-}
-
-if (checkAudioComfort) {
-  checkAudioComfort.checked = cosmicAudio.comfortMode;
-  checkAudioComfort.addEventListener('change', (e) => {
-    const enabled = e.target.checked;
-    cosmicAudio.setComfortMode(enabled);
-    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-    showToast(enabled ? t.toastComfortOn : t.toastComfortOff, 3500);
-  });
-}
-
-function openAudioModal() {
-  if (!modalAudioInfo) return;
-  updateAudioModalUI();
-  modalAudioInfo.style.display = 'flex';
-  void modalAudioInfo.offsetWidth;
-  modalAudioInfo.classList.add('open');
-}
-
-function closeAudioModal() {
-  if (!modalAudioInfo) return;
-  modalAudioInfo.classList.remove('open');
-  setTimeout(() => {
-    if (!modalAudioInfo.classList.contains('open')) {
-      modalAudioInfo.style.display = 'none';
-    }
-  }, 250);
-}
-
-if (btnAudioInfo) {
-  btnAudioInfo.addEventListener('click', openAudioModal);
-}
-if (btnAudioModalClose) {
-  btnAudioModalClose.addEventListener('click', closeAudioModal);
-}
-if (btnAudioLangToggle) {
-  btnAudioLangToggle.addEventListener('click', () => {
-    setAppLanguage(currentLang === 'ru' ? 'en' : 'ru');
-  });
-}
-if (modalAudioInfo) {
-  modalAudioInfo.addEventListener('click', (e) => {
-    if (e.target === modalAudioInfo) {
-      closeAudioModal();
-    }
-  });
-}
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && modalAudioInfo && modalAudioInfo.classList.contains('open')) {
-    closeAudioModal();
-  }
-});
-
-cosmicAudio.onSourceChange = () => {
-  updateAudioModalUI();
-};
-
-if (btnLoadCustomAudio && inputAudioFile) {
-  btnLoadCustomAudio.addEventListener('click', () => {
-    inputAudioFile.click();
-  });
-}
-if (inputAudioFile) {
-  inputAudioFile.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      handleIncomingFile(file);
-    }
+      ? '<span class="icon">🔊</span> Звук: Вкл' 
+      : '<span class="icon">🔇</span> Звук космоса';
   });
 }
 
@@ -522,41 +317,27 @@ if (sliderSpeed) {
   });
 }
 
-function updateFullscreenButton(isFs) {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  if (btnFullscreen) {
-    btnFullscreen.title = t.btnFullscreenTitle;
-    btnFullscreen.innerHTML = isFs 
-      ? `<span class="icon">⛶</span> ${t.btnFullscreenExit}` 
-      : `<span class="icon">⛶</span> ${t.btnFullscreenEnter}`;
-  }
-}
-
 if (btnFullscreen) {
   btnFullscreen.addEventListener('click', () => {
     const doc = document;
     const docEl = doc.documentElement;
-    const isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement);
-    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
+    const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement;
 
     if (!isFs) {
       const enterFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen;
       if (enterFs) {
-        enterFs.call(docEl).then(() => updateFullscreenButton(true)).catch(() => {});
+        enterFs.call(docEl).catch(() => {});
+        btnFullscreen.innerHTML = '<span class="icon">⛶</span> Свернуть';
       } else {
-        showToast(t.toastFullscreenUnsupported);
+        showToast('Полноэкранный режим не поддерживается на этом устройстве (iOS Safari)');
       }
     } else {
       const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen;
       if (exitFs) {
-        exitFs.call(doc).then(() => updateFullscreenButton(false)).catch(() => {});
+        exitFs.call(doc).catch(() => {});
+        btnFullscreen.innerHTML = '<span class="icon">⛶</span> На весь экран';
       }
     }
-  });
-
-  document.addEventListener('fullscreenchange', () => {
-    const isFs = !!document.fullscreenElement;
-    updateFullscreenButton(isFs);
   });
 }
 
@@ -574,53 +355,41 @@ function showToast(message, duration = 3000) {
 }
 
 // --- Multi-Format Skybox Image Loader (TIF/TIFF, JPG, PNG, WEBP, AVIF, BMP) ---
-function updateUploadBgButton() {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  if (btnUploadBg) {
-    if (customSkyboxName) {
-      btnUploadBg.classList.add('active');
-      btnUploadBg.title = t.btnUploadBgLoaded(customSkyboxName);
-      btnUploadBg.innerHTML = `<span>🌌</span> ${t.btnUploadBgTextDone}`;
-    } else {
-      btnUploadBg.classList.remove('active');
-      btnUploadBg.title = t.btnUploadBgTitle;
-      btnUploadBg.innerHTML = `<span>🌌</span> ${t.btnUploadBgText}`;
-    }
-  }
-}
-
 function applySkyboxTexture(texture, name) {
-  configureSkyboxTexture(texture);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+
   blackHoleMaterial.uniforms.uMilkyWay.value = texture;
-  customSkyboxName = name;
-  updateUploadBgButton();
+  if (btnUploadBg) {
+    btnUploadBg.classList.add('active');
+    btnUploadBg.title = `Загружена панорама: ${name}`;
+    btnUploadBg.innerHTML = `<span>🌌</span> Свой фон ✓`;
+  }
 }
 
 async function handleSkyboxFile(file) {
   if (!file) return;
   const fileName = file.name;
   const ext = fileName.split('.').pop().toLowerCase();
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
 
-  showToast(t.toastSkyboxLoading(fileName), 4000);
+  showToast(`Загрузка панорамы: ${fileName}...`, 4000);
 
   if (ext === 'tif' || ext === 'tiff') {
     try {
-      const mbSize = (file.size / (1024 * 1024)).toFixed(1);
-      showToast(t.toastTiffDecoding(mbSize), 6000);
-      const [buffer, { default: UTIF }] = await Promise.all([
-        file.arrayBuffer(),
-        import('./utils/utif.js')
-      ]);
+      showToast(`Декодирование TIFF (${(file.size / (1024 * 1024)).toFixed(1)} МБ)...`, 6000);
+      const buffer = await file.arrayBuffer();
       const ifds = UTIF.decode(buffer);
       if (!ifds || !ifds.length) {
-        throw new Error(t.toastTiffIfdError);
+        throw new Error('Файл не содержит корректных блоков IFD');
       }
       UTIF.decodeImage(buffer, ifds[0]);
       const w = ifds[0].width || ifds[0].t256?.[0];
       const h = ifds[0].height || ifds[0].t257?.[0];
       if (!w || !h) {
-        throw new Error(t.toastTiffSizeError);
+        throw new Error('Не удалось определить размеры изображения TIFF');
       }
 
       const rgba = UTIF.toRGBA8(ifds[0]);
@@ -657,10 +426,10 @@ async function handleSkyboxFile(file) {
 
       const texture = new THREE.CanvasTexture(canvas);
       applySkyboxTexture(texture, fileName);
-      showToast(t.toastTiffSuccess(targetW, targetH), 3500);
+      showToast(`✓ Панорама TIFF загружена: ${targetW}×${targetH}`, 3500);
     } catch (err) {
-      console.error('Error processing TIFF:', err);
-      showToast(t.toastTiffError(err.message), 4500);
+      console.error('Ошибка при обработке TIFF:', err);
+      showToast(`❌ Ошибка чтения TIFF: ${err.message}`, 4500);
     }
   } else {
     // JPG, PNG, WEBP, AVIF, BMP, etc.
@@ -669,41 +438,17 @@ async function handleSkyboxFile(file) {
       url,
       (customTex) => {
         applySkyboxTexture(customTex, fileName);
-        showToast(t.toastImgSuccess(fileName), 3500);
+        showToast(`✓ Панорама загружена: ${fileName}`, 3500);
         URL.revokeObjectURL(url);
       },
       undefined,
       (err) => {
-        console.error('Error loading texture:', err);
-        showToast(t.toastImgError, 4500);
+        console.error('Ошибка загрузки текстуры:', err);
+        showToast('❌ Ошибка загрузки изображения', 4500);
       }
     );
   }
 }
-
-// Unified File Ingestion Router (Images for Skybox, Audio for Cosmic Sound)
-async function handleIncomingFile(file) {
-  if (!file) return;
-  const fileName = file.name || '';
-  const isAudio = file.type.startsWith('audio/') || /\.(mp3|ogg|wav|m4a|aac|flac)$/i.test(fileName);
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-
-  if (isAudio) {
-    showToast(t.toastAudioLoading(fileName), 3000);
-    try {
-      await cosmicAudio.setSource(file);
-      showToast(t.toastAudioSuccess(fileName), 3500);
-      updateAudioModalUI();
-    } catch (err) {
-      console.error('Error loading audio:', err);
-      showToast(t.toastAudioError(err.message), 4500);
-    }
-    return;
-  }
-
-  await handleSkyboxFile(file);
-}
-window.handleIncomingFile = handleIncomingFile;
 
 // Custom Skybox Image Upload Support
 if (btnUploadBg && inputBgFile) {
@@ -714,7 +459,7 @@ if (btnUploadBg && inputBgFile) {
   inputBgFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
-      handleIncomingFile(file);
+      handleSkyboxFile(file);
     }
   });
 }
@@ -749,169 +494,50 @@ window.addEventListener('drop', (e) => {
 
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
-    handleIncomingFile(files[0]);
+    handleSkyboxFile(files[0]);
   }
 });
-
-// --- Dynamic Global Language Management ---
-export function setAppLanguage(lang) {
-  currentLang = lang;
-  currentAudioLang = lang;
-  saveLanguage(lang);
-
-  const t = TRANSLATIONS[lang] || TRANSLATIONS.en;
-
-  // 1. Update HTML lang & document title
-  document.documentElement.lang = lang;
-  document.title = t.pageTitle;
-
-  // 2. Preloader (if still in DOM)
-  const preloaderTitle = document.getElementById('preloader-title');
-  if (preloaderTitle) preloaderTitle.textContent = t.preloaderTitle;
-
-  // 3. Dropzone
-  const dropzoneTitle = document.getElementById('dropzone-title');
-  if (dropzoneTitle) dropzoneTitle.textContent = t.dropzoneTitle;
-  const dropzoneSub = document.getElementById('dropzone-sub');
-  if (dropzoneSub) dropzoneSub.textContent = t.dropzoneSub;
-
-  // 4. Header & Controls Hint
-  const appTitle = document.getElementById('app-title');
-  if (appTitle) appTitle.textContent = t.appTitle;
-  const appSubtitle = document.getElementById('app-subtitle');
-  if (appSubtitle) appSubtitle.textContent = t.appSubtitle;
-  const controlsHintText = document.getElementById('controls-hint-text');
-  if (controlsHintText) controlsHintText.innerHTML = t.controlsHint;
-
-  // 5. Telemetry HUD
-  if (telemetryTitle) {
-    telemetryTitle.textContent = isKerrMetric ? t.telemetryTitleKerr : t.telemetryTitleSchw;
-  }
-  const telLabelRadius = document.getElementById('tel-label-radius');
-  if (telLabelRadius) telLabelRadius.textContent = t.telRadiusLabel;
-  const telLabelShadow = document.getElementById('tel-label-shadow');
-  if (telLabelShadow) telLabelShadow.textContent = t.telShadowLabel;
-  const telLabelDilation = document.getElementById('tel-label-dilation');
-  if (telLabelDilation) telLabelDilation.textContent = t.telDilationLabel;
-
-  // 6. Language Switcher Pills
-  const pills = document.querySelectorAll('.lang-pill');
-  pills.forEach((p) => {
-    p.classList.toggle('active', p.dataset.lang === lang);
-  });
-  if (btnLangToggle) {
-    btnLangToggle.title = t.btnLangToggleTitle;
-  }
-
-  // 7. Presets Buttons
-  if (btnViewOrbit) {
-    btnViewOrbit.title = t.btnPresetOrbitTitle;
-    btnViewOrbit.innerHTML = `<span>🪐</span> ${t.btnPresetOrbitText}`;
-  }
-  if (btnViewSphere) {
-    btnViewSphere.title = t.btnPresetSphereTitle;
-    btnViewSphere.innerHTML = `<span>🌀</span> ${t.btnPresetSphereText}`;
-  }
-  if (btnViewPortal) {
-    btnViewPortal.title = t.btnPresetPortalTitle;
-    btnViewPortal.innerHTML = `<span>🕳️</span> ${t.btnPresetPortalText}`;
-  }
-
-  // 8. Metric Button
-  if (btnMetricToggle) {
-    btnMetricToggle.title = t.btnMetricTitle;
-  }
-  if (metricLabel) {
-    metricLabel.textContent = isKerrMetric ? t.metricKerrText : t.metricSchwText;
-  }
-
-  // 9. Audio & Volume
-  updateAudioButtons(cosmicAudio.isPlaying);
-  if (sliderVolume && sliderVolume.parentElement) {
-    sliderVolume.parentElement.title = t.audioVolTitle;
-    sliderVolume.setAttribute('aria-label', t.audioVolAria);
-  }
-  if (btnAudioInfo) {
-    btnAudioInfo.title = t.audioInfoTitle;
-    btnAudioInfo.setAttribute('aria-label', t.audioInfoAria);
-  }
-
-  // 10. Visual FX Buttons
-  if (btnBloom) {
-    btnBloom.title = t.btnBloomTitle;
-    btnBloom.innerHTML = `<span>✨</span> ${t.btnBloomText}`;
-  }
-  if (btnParticles) {
-    btnParticles.title = t.btnParticlesTitle;
-    btnParticles.innerHTML = `<span>🌪️</span> ${t.btnParticlesText}`;
-  }
-  if (btnPlanet) {
-    btnPlanet.title = t.btnPlanetTitle;
-    btnPlanet.innerHTML = `<span>🪐</span> ${t.btnPlanetText}`;
-  }
-  updateUploadBgButton();
-
-  // 11. Speed & Fullscreen
-  const speedLabel = document.getElementById('speed-label');
-  if (speedLabel) speedLabel.textContent = t.speedLabel;
-  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
-  updateFullscreenButton(isFs);
-  updateToggleUIButton();
-
-  // 12. Audio Modal
-  updateAudioModalUI();
-}
-
-if (btnLangToggle) {
-  btnLangToggle.addEventListener('click', (e) => {
-    const pill = e.target.closest('.lang-pill');
-    let targetLang = currentLang === 'en' ? 'ru' : 'en';
-    if (pill && pill.dataset.lang) {
-      targetLang = pill.dataset.lang;
-    }
-    setAppLanguage(targetLang);
-  });
-}
-
-// Initial UI synchronization
-setAppLanguage(currentLang);
 
 // --- Animation Loop ---
 const clock = new THREE.Clock();
 let simTime = 0.0;
-const camWorldDir = new THREE.Vector3();
-const IDLE_ROTATION_AXIS = new THREE.Vector3(0, 1, 0);
-
-// Cached strings and frame throttling for telemetry HUD to avoid DOM layout thrashing
-let lastTelRadiusStr = '';
-let lastTelShadowStr = '';
-let lastTelDilationStr = '';
-let hudFrameCount = 0;
 
 /**
  * Format Kerr relativistic time dilation with iconic Interstellar time scale (1 hr = X years / days / hours)
  */
 function formatKerrDilation(gamma) {
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   if (gamma < 1.05) {
-    return `× 1.0 <span class="unit">${t.dilationApproxHour}</span>`;
+    return `× 1.0 <span class="unit">(1ч ≈ 1ч)</span>`;
   } else if (gamma < 24.0) {
-    return `× ${gamma.toFixed(1)} <span class="unit">${t.dilationApproxHours(gamma.toFixed(1))}</span>`;
+    return `× ${gamma.toFixed(1)} <span class="unit">(1ч ≈ ${gamma.toFixed(1)}ч)</span>`;
   } else if (gamma < 8766.0) {
     const days = (gamma / 24.0).toFixed(1);
-    return `× ${Math.round(gamma).toLocaleString(t.numberLocale)} <span class="unit">${t.dilationApproxDays(days)}</span>`;
+    return `× ${Math.round(gamma).toLocaleString('ru-RU')} <span class="unit">(1ч ≈ ${days}д)</span>`;
   } else if (gamma < 1000000.0) {
     const years = (gamma / 8766.0).toFixed(1);
-    return `<span style="color: #38bdf8;">× ${Math.round(gamma).toLocaleString(t.numberLocale)}</span> <span class="unit">${t.dilationYears(years)}</span>`;
+    return `<span style="color: #38bdf8;">× ${Math.round(gamma).toLocaleString('ru-RU')}</span> <span class="unit">(1ч = ${years} лет)</span>`;
   } else {
     const m = (gamma / 1000000.0).toFixed(1);
-    return `<span style="color: #f43f5e;">× ${m}M</span> <span class="unit">${t.dilationEons}</span>`;
+    return `<span style="color: #f43f5e;">× ${m}M</span> <span class="unit">(1ч = века)</span>`;
   }
 }
 
+// --- Preloader Dismissal & Safety Timeout ---
+let renderedFrames = 0;
+function hidePreloader() {
+  const preloader = document.getElementById('preloader');
+  if (!preloader || preloader.classList.contains('fade-out')) return;
+  preloader.classList.add('fade-out');
+  setTimeout(() => {
+    if (preloader.parentNode) preloader.parentNode.removeChild(preloader);
+  }, 950);
+}
+
+// Fallback safety timeout ensures preloader never gets stuck if tab was initially in background
+setTimeout(hidePreloader, 4000);
+
 function animate() {
   requestAnimationFrame(animate);
-  const frameStart = performance.now();
 
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();
@@ -936,13 +562,13 @@ function animate() {
     dilationHTML = formatKerrDilation(kerrDilation);
 
     // Relativistic orbital speed of external Miller's planet as seen by the observer:
-    // When the observer dives below Miller (r < 5.6) towards the event horizon (r -> 1.015),
+    // When the observer dives below Miller (r < 5.6) towards the event horizon (r -> 1.06),
     // observer's local time slows to a crawl, so external Miller's planet visibly rushes across the sky (~2s per full orbit)!
     if (camR >= 5.6) {
       orbitMultiplier = 1.0;
       visualTimeMultiplier = 1.0;
     } else {
-      const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - controls.minRadius)));
+      const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - 1.06)));
       orbitMultiplier = 1.0 + Math.pow(depth, 1.7) * 44.0;
       visualTimeMultiplier = 1.0 + Math.pow(depth, 1.7) * 2.8;
     }
@@ -954,7 +580,7 @@ function animate() {
     visualTimeMultiplier = Math.min(2.5, schwDilation);
   }
 
-  simTime = (simTime + delta * visualTimeMultiplier) % 86400.0;
+  simTime += delta * visualTimeMultiplier;
 
   // Update Miller's planet orbital position
   planetOrbitAngle += delta * 0.08 * diskSpeedMultiplier * orbitMultiplier;
@@ -963,285 +589,104 @@ function animate() {
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.sin(planetInclination),
     Math.sin(planetOrbitAngle) * planetOrbitRadius * Math.cos(planetInclination)
   );
-
-  // Update space flight controls (WASD movement & smooth mouse rotation)
-  const tCtrl0 = performance.now();
-  controls.update(delta);
-  diagAccum.controls += performance.now() - tCtrl0;
-
-  // Update shader uniforms
-  blackHoleMaterial.uniforms.uTime.value = simTime;
-  blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
   blackHoleMaterial.uniforms.uPlanetPos.value.copy(planetPos);
 
-  // Calculate black hole celestial shadow fraction
-  // r_crit = 1.5 * sqrt(3) ≈ 2.598 Rs (photon capture impact parameter for Schwarzschild)
-  const rCrit = 2.598;
-  const sinAlpha = Math.min(1.0, rCrit / Math.max(camR, 1.002));
-  const cosAlpha = Math.sqrt(Math.max(0.0, 1.0 - sinAlpha * sinAlpha));
-  const shadowFrac = Math.max(0.0, Math.min(1.0, (1.0 - cosAlpha) * 0.5));
+  // Update space flight controls (WASD movement & smooth mouse rotation)
+  controls.update(delta);
 
-  // Pure physical Schwarzschild gamma dilation for audio (independent of HUD metric mode)
-  const physicalGamma = 1.0 / Math.sqrt(Math.max(0.0001, 1.0 - 1.0 / Math.max(camR, 1.002)));
+  // Update dynamic relativistic flight telemetry HUD
+  if (telRadius && telShadow && telDilation) {
+    const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
+    const angleRad = Math.asin(sinVal);
+    let shadowFrac;
+    if (camR >= 1.5) {
+      const cosVal = Math.cos(angleRad);
+      shadowFrac = (1.0 - cosVal) * 0.5;
+    } else {
+      const cosVal = Math.cos(angleRad);
+      const skyFrac = (1.0 - cosVal) * 0.5;
+      shadowFrac = 1.0 - skyFrac;
+    }
 
-  // Real-time Relativistic Telemetry HUD update (throttled to ~15-20 Hz with string diffing)
-  const tHud0 = performance.now();
-  hudFrameCount++;
-  if (hudFrameCount % 4 === 0) {
-    if (telRadius) {
-      const newRadiusStr = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
-      if (newRadiusStr !== lastTelRadiusStr) {
-        telRadius.innerHTML = newRadiusStr;
-        lastTelRadiusStr = newRadiusStr;
-      }
-    }
-    if (telShadow) {
-      const newShadowStr = `${(shadowFrac * 100).toFixed(1)}%`;
-      if (newShadowStr !== lastTelShadowStr) {
-        telShadow.textContent = newShadowStr;
-        lastTelShadowStr = newShadowStr;
-      }
-    }
-    if (telDilation) {
-      if (dilationHTML !== lastTelDilationStr) {
-        telDilation.innerHTML = dilationHTML;
-        lastTelDilationStr = dilationHTML;
-      }
+    telRadius.innerHTML = `${camR.toFixed(2)} <span class="unit">Rs</span>`;
+    telShadow.textContent = `${(shadowFrac * 100).toFixed(1)}%`;
+    telDilation.innerHTML = dilationHTML;
+
+    if (camR < 1.15) {
+      telRadius.style.color = '#ff4d4d';
+    } else if (camR < 2.0) {
+      telRadius.style.color = '#ffaa44';
+    } else {
+      telRadius.style.color = '#f1f5f9';
     }
   }
-  diagAccum.hud += performance.now() - tHud0;
 
-  // Update real-time audio with observer state
-  const tAudio0 = performance.now();
-  camera.getWorldDirection(camWorldDir);
-  cosmicAudio.update(camR, physicalGamma, shadowFrac, camera.position, diskSpeedMultiplier);
-  diagAccum.audio += performance.now() - tAudio0;
-
-  // Subtle cinematic idle drift when not actively navigating (frame-rate independent)
-  // Only engaged when in wide orbit (camR > 3.0) to prevent pitching down into the horizon when surface skimming
-  if (!controls.isDragging && !controls.isInteracting && !controls.isResetting && camR > 3.0) {
-    const idleAngle = delta * 0.015;
-    camera.position.applyAxisAngle(IDLE_ROTATION_AXIS, idleAngle);
-    camera.lookAt(0, 0, 0);
-    if (camera.position.length() < controls.minRadius) {
-      camera.position.setLength(controls.minRadius);
-    }
+  // Subtle cinematic idle drift when not actively navigating
+  if (!controls.isInteracting && !controls.isResetting) {
+    const driftAngle = simTime * 0.025;
+    camera.position.y += Math.sin(driftAngle) * 0.0006;
+    controls.targetYaw += delta * 0.003;
   }
+
+  // Update dynamic audio redshift/distance modulation
+  cosmicAudio.update(camera.position.length());
 
   // Center bounding mesh around camera
   blackHoleMesh.position.copy(camera.position);
 
+  // Update uniforms
+  blackHoleMaterial.uniforms.uTime.value = simTime;
+  blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
+
   // Render with post-processing
   composer.render();
 
-  // Periodic Diagnostics Telemetry Collection & Dispatch (~every 2 seconds)
-  diagAccum.totalFrame += performance.now() - frameStart;
-  diagFrames++;
-
-  const nowTime = performance.now();
-  if (nowTime - diagLastTime >= 2000) {
-    const elapsed = nowTime - diagLastTime;
-    const avgFps = Math.round((diagFrames * 1000) / elapsed);
-    const metrics = {
-      fps: avgFps,
-      gpu: getGPUInfo(),
-      res: `${window.innerWidth}x${window.innerHeight} (DPR ${renderer.getPixelRatio().toFixed(2)})`,
-      frameMs: (diagAccum.totalFrame / diagFrames).toFixed(2),
-      shaderMs: (diagAccum.shader / diagFrames).toFixed(2),
-      bloomMs: (diagAccum.bloom / diagFrames).toFixed(2),
-      outputMs: (diagAccum.output / diagFrames).toFixed(2),
-      controlsMs: (diagAccum.controls / diagFrames).toFixed(2),
-      audioMs: (diagAccum.audio / diagFrames).toFixed(2),
-      hudMs: (diagAccum.hud / diagFrames).toFixed(2)
-    };
-    window.__PERF_METRICS__ = metrics;
-    console.log('[PERF_DIAG]', metrics);
-    fetch(`http://${window.location.hostname}:5175/diag`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(metrics)
-    }).catch(() => {});
-
-    diagFrames = 0;
-    diagLastTime = nowTime;
-    for (const k in diagAccum) diagAccum[k] = 0;
-  }
-
-  // Dismiss preloader smoothly once textures are active and 3 clean frames are presented
-  if (isAppReady && renderedFrames < 3) {
+  // Dismiss preloader smoothly once the first 2 frames are cleanly presented on the canvas
+  if (renderedFrames <= 2) {
     renderedFrames++;
-    if (renderedFrames === 3) {
-      const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-      updatePreloader(100, t.preloaderReady);
-      setTimeout(() => {
-        requestAnimationFrame(hidePreloader);
-      }, 180);
+    if (renderedFrames >= 2) {
+      requestAnimationFrame(hidePreloader);
     }
   }
 }
 
-// --- Preloader Management & UI Updates ---
-const preloaderStatus = document.getElementById('preloader-status');
-const preloaderBarFill = document.querySelector('.preloader-bar-fill');
 
-function updatePreloader(percent, message) {
-  if (preloaderBarFill) {
-    preloaderBarFill.style.width = `${Math.min(100, Math.max(0, Math.round(percent)))}%`;
-  }
-  if (preloaderStatus && message) {
-    preloaderStatus.textContent = message;
-  }
+
+// --- Shader Precompilation & GPU Warmup ---
+// Precompile all shaders and render 1 warm-up frame before animation starts to eliminate runtime stutter
+try {
+  if (preloaderStatus) preloaderStatus.textContent = 'Компиляция релятивистских шейдеров...';
+  if (preloaderBarFill) preloaderBarFill.style.width = '88%';
+  renderer.compile(scene, camera);
+  composer.render(0);
+  if (preloaderBarFill) preloaderBarFill.style.width = '100%';
+  if (preloaderStatus) preloaderStatus.textContent = 'Горизонт событий стабилизирован';
+} catch (e) {
+  console.warn('Precompile warm-up bypassed:', e);
 }
 
-let isAppReady = false;
-let renderedFrames = 0;
-let safetyTimeoutId = null;
+animate();
 
-function hidePreloader() {
-  if (safetyTimeoutId) clearTimeout(safetyTimeoutId);
-  const preloader = document.getElementById('preloader');
-  if (!preloader || preloader.classList.contains('fade-out')) return;
-  preloader.classList.add('fade-out');
-  setTimeout(() => {
-    if (preloader.parentNode) preloader.parentNode.removeChild(preloader);
-  }, 950);
-}
-
-// Fallback safety timeout ensures preloader never gets stuck even on rare network/driver stalls
-safetyTimeoutId = setTimeout(() => {
-  console.warn('Preloader safety timeout triggered');
-  hidePreloader();
-}, 25000);
-
-/**
- * Loads a texture with real streaming byte progress.
- * Uses fetch + ReadableStream when possible, falling back to THREE.TextureLoader.
- */
-async function loadTextureWithProgress(url, onProgress) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${url}`);
-
-    const contentLength = response.headers.get('content-length');
-    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-
-    let blob;
-    if (response.body && response.body.getReader) {
-      const reader = response.body.getReader();
-      const chunks = [];
-      let loadedBytes = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        loadedBytes += value.length;
-        if (onProgress) {
-          onProgress(loadedBytes, totalBytes || loadedBytes);
-        }
-      }
-      blob = new Blob(chunks);
-    } else {
-      blob = await response.blob();
-      if (onProgress) onProgress(blob.size, blob.size);
-    }
-
-    const objectUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    await new Promise((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = (err) => reject(err);
-      img.src = objectUrl;
-    });
-    URL.revokeObjectURL(objectUrl);
-
-    const tex = new THREE.Texture(img);
-    configureSkyboxTexture(tex);
-    return tex;
-  } catch (err) {
-    console.warn(`Progress fetch failed for ${url}, falling back to TextureLoader:`, err);
-    return new Promise((resolve) => {
-      const loader = new THREE.TextureLoader();
-      loader.load(
-        url,
-        (tex) => {
-          configureSkyboxTexture(tex);
-          resolve(tex);
-        },
-        undefined,
-        (loadErr) => {
-          console.error(`Failed to load texture ${url}:`, loadErr);
-          resolve(placeholderTex);
-        }
-      );
-    });
-  }
-}
-
-// --- Application Boot Sequence ---
-async function startSimulation() {
-  const EXPECTED_TOTAL_BYTES = 9843333; // milkyway.jpg (~9.38MB)
-  let totalReportedBytes = EXPECTED_TOTAL_BYTES;
-
-  function reportProgress(loaded, total) {
-    if (total > 0) {
-      totalReportedBytes = total;
-    }
-    const progressRatio = Math.min(1.0, loaded / Math.max(loaded, totalReportedBytes));
-    const progressPercent = Math.min(85, Math.round(progressRatio * 85));
-    const mbLoaded = (loaded / (1024 * 1024)).toFixed(1);
-    const mbTotal = (totalReportedBytes / (1024 * 1024)).toFixed(1);
-    const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-    updatePreloader(progressPercent, t.preloaderLoadingTextures(mbLoaded, mbTotal, Math.round(progressRatio * 100)));
-  }
-
-  // Load celestial background texture with real byte progress
-  const mwTex = await loadTextureWithProgress('./milkyway.jpg', (loaded, total) => reportProgress(loaded, total));
-
-  const t = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
-  updatePreloader(88, t.preloaderPreparingTextures);
-  blackHoleMaterial.uniforms.uMilkyWay.value = mwTex;
-
-  updatePreloader(94, t.preloaderCompilingShader);
-  try {
-    renderer.compile(scene, camera);
-    composer.render(0);
-  } catch (e) {
-    console.warn('Precompile warm-up bypassed:', e);
-  }
-
-  clock.start();
-  isAppReady = true;
-  animate();
-}
-
-startSimulation().catch((err) => {
-  console.error('Simulation initialization failed, falling back to instant launch:', err);
-  try {
-    renderer.compile(scene, camera);
-    composer.render(0);
-  } catch (e) {}
-  isAppReady = true;
-  animate();
-  hidePreloader();
-});
-
-// --- Resize Handler ---
-window.addEventListener('resize', () => {
+// --- Resize & Orientation Change Handlers ---
+function handleResize() {
   const width = window.innerWidth;
   const height = window.innerHeight;
 
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
 
-  const pr = Math.min(window.devicePixelRatio || 1.0, 1.25);
   renderer.setSize(width, height);
-  renderer.setPixelRatio(pr);
+  renderer.setPixelRatio(getOptimalDPR());
 
-  composer.setPixelRatio(pr);
   composer.setSize(width, height);
-  if (fxaaPass) {
-    fxaaPass.material.uniforms['resolution'].value.x = 1 / (width * pr);
-    fxaaPass.material.uniforms['resolution'].value.y = 1 / (height * pr);
-  }
+  const bScale = getBloomScale();
+  bloomPass.setSize(
+    Math.max(128, Math.floor(width * bScale)),
+    Math.max(128, Math.floor(height * bScale))
+  );
+}
+
+window.addEventListener('resize', handleResize);
+window.addEventListener('orientationchange', () => {
+  setTimeout(handleResize, 120);
 });

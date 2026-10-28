@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gargantua — Black Hole Simulation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Гаргантюа — Симуляция Чёрной Дыры</title>
   <link rel="stylesheet" href="./src/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22black%22 stroke=%22%23ff9933%22 stroke-width=%228%22/></svg>">
 </head>
@@ -17,10 +17,10 @@
         <div class="preloader-ring"></div>
         <div class="preloader-hole"></div>
       </div>
-      <h2 id="preloader-title" class="preloader-title">GARGANTUA</h2>
-      <p id="preloader-status" class="preloader-status">Loading cosmic spacetime...</p>
+      <h2 class="preloader-title">ГАРГАНТЮА</h2>
+      <p id="preloader-status" class="preloader-status">Инициализация искривления пространства...</p>
       <div class="preloader-bar">
-        <div class="preloader-bar-fill"></div>
+        <div id="preloader-bar-fill" class="preloader-bar-fill"></div>
       </div>
     </div>
   </div>
@@ -33,8 +33,8 @@
   <!-- Drag and Drop Overlay -->
   <div id="dropzone" class="dropzone">
     <div class="dropzone-box">
-      <span id="dropzone-title">🌌 Drag and drop celestial panorama here</span>
-      <small id="dropzone-sub">Supported formats: TIF, TIFF, JPG, PNG, WEBP, AVIF</small>
+      🌌 Перетащите панораму сюда
+      <small>Поддерживаются форматы: TIF, TIFF, JPG, PNG, WEBP, AVIF</small>
     </div>
   </div>
 
@@ -42,54 +42,67 @@
   <div id="ui-overlay">
     <div class="top-bar">
       <div class="header">
-        <h1 id="app-title" class="title">GARGANTUA</h1>
-        <p id="app-subtitle" class="subtitle">Supermassive Black Hole & Gravitational Lensing</p>
+        <h1 class="title">ГАРГАНТЮА</h1>
+        <p class="subtitle">Сверхмассивная чёрная дыра и гравитационное линзирование</p>
 
-        <div class="controls-hint">
+        <div id="controls-hint" class="controls-hint">
           <span class="mouse-icon">🚀</span>
-          <span id="controls-hint-text"><strong>WASD</strong> — space flight • <strong>Hold LMB</strong> for 360° view • <strong>Shift</strong> — boost • <strong>Space / C</strong> — ascend / descend</span>
+          <span><strong>WASD</strong> — полёт в космосе • <strong>Зажмите ЛКМ</strong> для обзора 360° • <strong>Shift</strong> — ускорение • <strong>Space / C</strong> — вверх / вниз</span>
         </div>
       </div>
 
-      <!-- Top Right: Real-time Relativistic Telemetry & Control Actions -->
+      <!-- Top Right: Real-time Relativistic Telemetry & Toggle UI button directly underneath -->
       <div class="top-right-col">
         <div id="telemetry-hud" class="telemetry-hud">
           <div class="telemetry-header">
             <span class="telemetry-dot"></span>
-            <span id="telemetry-title">TELEMETRY • KERR (INTERSTELLAR)</span>
+            <span id="telemetry-title">ТЕЛЕМЕТРИЯ • КЕРР (ИНТЕРСТЕЛЛАР)</span>
           </div>
           <div class="telemetry-grid">
             <div class="telemetry-item">
-              <span id="tel-label-radius" class="telemetry-label">DISTANCE (r)</span>
+              <span class="telemetry-label">РАССТОЯНИЕ (r)</span>
               <span id="tel-radius" class="telemetry-value">15.20 <span class="unit">Rs</span></span>
             </div>
             <div class="telemetry-item">
-              <span id="tel-label-shadow" class="telemetry-label">SKY SHADOW</span>
+              <span class="telemetry-label">ТЕНЬ НА НЕБЕ</span>
               <span id="tel-shadow" class="telemetry-value">0.7%</span>
             </div>
             <div class="telemetry-item">
-              <span id="tel-label-dilation" class="telemetry-label">TIME DILATION</span>
-              <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1h ≈ 1h)</span></span>
+              <span class="telemetry-label">ДИЛАТАЦИЯ ВРЕМЕНИ</span>
+              <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1ч ≈ 1ч)</span></span>
             </div>
           </div>
         </div>
 
-        <div class="top-actions-row">
-          <button id="btn-toggle-ui" class="btn-toggle-ui" title="Hide/show control panel">
-            <span class="toggle-icon">👁</span>
-            <span class="toggle-text">Hide UI</span>
+        <button id="btn-toggle-ui" class="btn-toggle-ui" title="Скрыть/показать панель управления">
+          <span class="toggle-icon">👁</span>
+          <span class="toggle-text">Скрыть интерфейс</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Touch Flight Controls (Virtual Joystick & Altitude / Boost) -->
+    <div id="mobile-controls" class="mobile-controls">
+      <!-- Left: Analog Virtual Joystick for Flight Propulsion & Strafing -->
+      <div id="joystick-zone" class="joystick-zone">
+        <div id="joystick-base" class="joystick-base">
+          <div id="joystick-knob" class="joystick-knob"></div>
+        </div>
+        <div class="joystick-hint">ТЯГА / МАНЕВР</div>
+      </div>
+
+      <!-- Right: Touch Altitude & Turbo Boost -->
+      <div class="mobile-actions">
+        <button id="btn-touch-boost" class="touch-btn touch-btn-boost" type="button" title="Форсаж ускорения">
+          <span class="btn-icon">🚀</span>
+          <span class="btn-txt">ФОРСАЖ</span>
+        </button>
+        <div class="touch-altitude-group">
+          <button id="btn-touch-up" class="touch-btn touch-btn-alt" type="button" title="Набор высоты (Вверх)">
+            <span>▲</span>
           </button>
-          <button id="btn-quick-audio" class="btn-quick-sound" title="Toggle cosmic sound">
-            <span class="sound-icon">🔇</span>
-            <span class="sound-text">Sound</span>
-          </button>
-          <button id="btn-lang-toggle" class="btn-lang-toggle" title="Switch language / Сменить язык (EN / RU)">
-            <span class="lang-icon">🌐</span>
-            <span class="lang-switch-pills">
-              <span class="lang-pill active" data-lang="en">EN</span>
-              <span class="lang-divider">/</span>
-              <span class="lang-pill" data-lang="ru">RU</span>
-            </span>
+          <button id="btn-touch-down" class="touch-btn touch-btn-alt" type="button" title="Снижение (Вниз)">
+            <span>▼</span>
           </button>
         </div>
       </div>
@@ -97,125 +110,87 @@
 
     <div class="controls-panel">
       <!-- Camera Presets -->
-      <button id="btn-view-orbit" class="btn btn-preset" title="Miller's Planet Orbit (r = 5.6 Rs)">
-        <span>🪐</span> Miller
+      <button id="btn-view-orbit" class="btn btn-preset" title="Орбита планеты Миллер (r = 5.6 Rs)">
+        <span>🪐</span> Миллер
       </button>
 
-      <button id="btn-view-sphere" class="btn btn-preset" title="Photon Sphere: 50% sky shadow (r = 1.50 Rs)">
-        <span>🌀</span> Photon Sphere
+      <button id="btn-view-sphere" class="btn btn-preset" title="Фотонная сфера: тень 50% неба (r = 1.50 Rs)">
+        <span>🌀</span> Фотонная сфера
       </button>
 
-      <button id="btn-view-portal" class="btn btn-preset primary highlight" title="Horizon Edge (r = 1.015 Rs): the entire external Universe gathers into a radiant circular porthole overhead!">
-        <span>🕳️</span> Universe Window
+      <button id="btn-view-portal" class="btn btn-preset primary highlight" title="Субфотонная глубина (r = 1.06 Rs): всё внешнее небо умещается в круг на экране!">
+        <span>🕳️</span> Окно Вселенной
       </button>
 
       <div class="divider"></div>
 
       <!-- Metric Mode Toggle: Kerr (Interstellar) ↔ Schwarzschild (Static) -->
-      <button id="btn-metric-toggle" class="btn btn-metric active" title="Toggle Metric: Spinning Kerr hole (Interstellar) ↔ Static Schwarzschild hole">
-        <span id="metric-icon">🌀</span> <span id="metric-label">Kerr (spinning)</span>
+      <button id="btn-metric-toggle" class="btn btn-metric active" title="Переключение метрики: Вращающаяся дыра Керра (Интерстеллар) ↔ Статичная дыра Шварцшильда">
+        <span id="metric-icon">🌀</span> <span id="metric-label">Керр (вращение)</span>
       </button>
 
       <div class="divider"></div>
 
-      <!-- Audio Control (Prominently placed in primary toolbar with volume slider) -->
-      <div class="audio-btn-group">
-        <button id="btn-audio" class="btn btn-util btn-sound" title="Atmospheric NASA sonification sound (on/off)">
-          <span class="icon">🔇</span> Cosmic Sound
-        </button>
-        <div class="audio-vol-wrap" title="Audio volume">
-          <span class="vol-icon">🔉</span>
-          <input id="slider-volume" type="range" min="0" max="100" value="60" step="1" aria-label="Volume">
-          <span id="volume-val">60%</span>
-        </div>
-        <button id="btn-audio-info" class="btn btn-icon" title="About audio & Chandra sonification" aria-label="About audio">
-          <span>ⓘ</span>
-        </button>
-      </div>
-      <input type="file" id="input-audio-file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.aac,.flac" style="display: none;">
-
-      <div class="divider"></div>
-
-      <button id="btn-bloom" class="btn btn-fx active" title="Toggle bloom glow">
-        <span>✨</span> Glow
+      <button id="btn-bloom" class="btn btn-fx active" title="Включить/выключить свечение">
+        <span>✨</span> Свечение
       </button>
 
-      <button id="btn-particles" class="btn btn-fx active" title="Toggle gravitationally lensed dust embers">
-        <span>🌪️</span> Dust Embers
+      <button id="btn-particles" class="btn btn-fx active" title="Включить/выключить гравитационно линзируемые искры пыли">
+        <span>🌪️</span> Искры пыли
       </button>
 
-      <button id="btn-planet" class="btn btn-fx active" title="Toggle Miller's planet">
-        <span>🪐</span> Planet
+      <button id="btn-planet" class="btn btn-fx active" title="Включить/выключить планету">
+        <span>🪐</span> Планета
       </button>
 
       <!-- Custom background upload button -->
-      <button id="btn-upload-bg" class="btn btn-fx" title="Select custom celestial panorama image from computer">
-        <span>🌌</span> Custom Skybox
+      <button id="btn-upload-bg" class="btn btn-fx" title="Выбрать любую картинку космоса (панораму) с компьютера">
+        <span>🌌</span> Свой фон
       </button>
       <input type="file" id="input-bg-file" accept=".tif,.tiff,.jpg,.jpeg,.png,.webp,.avif,.bmp,image/*" style="display: none;">
 
       <div class="divider"></div>
 
       <div class="slider-group">
-        <label id="speed-label" for="slider-speed">Speed:</label>
+        <label for="slider-speed">Скорость:</label>
         <input id="slider-speed" type="range" min="0.0" max="2.5" step="0.1" value="0.85">
         <span id="speed-val">0.9x</span>
       </div>
 
       <div class="divider"></div>
 
-      <button id="btn-fullscreen" class="btn btn-util" title="Fullscreen mode">
-        <span class="icon">⛶</span> Fullscreen
+      <button id="btn-audio" class="btn btn-util" title="Атмосферный космический звук">
+        <span class="icon">🔇</span> Звук космоса
+      </button>
+
+      <button id="btn-fullscreen" class="btn btn-util" title="Полноэкранный режим">
+        <span class="icon">⛶</span> На весь экран
       </button>
     </div>
   </div>
 
-  <!-- Modal: About Audio -->
-  <div id="modal-audio-info" class="modal-backdrop" style="display: none;">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <div class="modal-title">
-          <span class="modal-icon">🎵</span>
-          <span id="audio-modal-title">About the Sound</span>
-        </div>
-        <div class="modal-actions">
-          <button id="btn-audio-lang-toggle" class="btn-lang" title="Switch language / Сменить язык">RU</button>
-          <button id="btn-audio-modal-close" class="btn-close" title="Close (Esc)">✕</button>
-        </div>
-      </div>
-      <div class="modal-body">
-        <div id="audio-modal-desc" class="modal-text"></div>
-        <div id="audio-modal-credit" class="modal-credit"></div>
+  <script>
+    // Toggle UI visibility logic
+    const btnToggleUI = document.getElementById('btn-toggle-ui');
+    const toggleText = btnToggleUI ? btnToggleUI.querySelector('.toggle-text') : null;
+    let uiVisible = true;
 
-        <!-- Comfort Mode Option -->
-        <div class="modal-comfort-card">
-          <label class="comfort-toggle-label" for="check-audio-comfort">
-            <input type="checkbox" id="check-audio-comfort" checked>
-            <span class="comfort-custom-check"></span>
-            <span class="comfort-title" id="comfort-label-title">🕊️ Comfort Mode (anti-nausea)</span>
-          </label>
-          <div class="comfort-desc" id="comfort-mode-desc">
-            Recommended for headphones: centers sound phase and disables asynchronous Doppler layers to eliminate dizziness and nausea. Uncheck to enable extreme relativistic Doppler.
-          </div>
-        </div>
+    window.toggleUIVisibility = function(force) {
+      uiVisible = (typeof force === 'boolean') ? force : !uiVisible;
+      document.body.classList.toggle('ui-hidden', !uiVisible);
+      if (toggleText) {
+        toggleText.textContent = uiVisible ? 'Скрыть интерфейс' : 'Показать интерфейс';
+      }
+      return uiVisible;
+    };
 
-        <!-- Psychoacoustic Vestibular Warning -->
-        <div class="modal-warning-card">
-          <span class="warning-icon">⚠️</span>
-          <div class="warning-body">
-            <span class="warning-title" id="audio-warning-title">Vestibular Sensitivity Warning</span>
-            <p class="warning-text" id="audio-warning-text">NASA's sonification is generated from Perseus X-ray waves and contains deep sub-bass modulation (~58 Hz). In headphones, these can trigger motion sickness (vestibular illusion of rotation). Lower the volume or enable Comfort Mode if discomfort occurs.</p>
-          </div>
-        </div>
-
-        <div class="modal-source-badge">
-          <span id="audio-source-status">Current source: NASA Perseus Sonification</span>
-          <button id="btn-load-custom-audio" class="btn btn-sm">Load Custom Track</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
+    if (btnToggleUI) {
+      btnToggleUI.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.toggleUIVisibility();
+      });
+    }
+  </script>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>
