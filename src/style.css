@@ -1,10 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600&display=swap');
 
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 html, body {
@@ -14,9 +22,12 @@ html, body {
   background-color: #020204;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #e6e8eb;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 #canvas-container {
+  touch-action: none;
   position: absolute;
   top: 0;
   left: 0;
@@ -37,7 +48,7 @@ html, body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 28px 36px;
+  padding: max(20px, var(--sat)) max(24px, var(--sar)) max(18px, var(--sab)) max(24px, var(--sal));
   box-sizing: border-box;
 }
 
@@ -479,21 +490,338 @@ body.ui-hidden #btn-toggle-ui {
   color: #94a3b8;
 }
 
-/* Responsive adjustments */
+/* --- Mobile Touch Flight Controls (Virtual Analog Joystick & Thrusters) --- */
+.mobile-controls {
+  pointer-events: none;
+  display: none; /* Displayed on touch/coarse devices and screens <= 900px */
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+  padding: 0 4px 6px 4px;
+  box-sizing: border-box;
+  margin-top: auto;
+  margin-bottom: 8px;
+  z-index: 15;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+@media (pointer: coarse), (max-width: 900px), (max-height: 520px) {
+  .mobile-controls {
+    display: flex;
+  }
+}
+
+body.ui-hidden .mobile-controls {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(18px);
+}
+
+/* Joystick Zone */
+.joystick-zone {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  touch-action: none;
+}
+
+.joystick-base {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 22, 34, 0.55) 0%, rgba(8, 12, 18, 0.78) 100%);
+  border: 1.5px solid rgba(255, 170, 70, 0.32);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 16px rgba(255, 140, 40, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.joystick-knob {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffb766 0%, #e67e22 65%, #933c00 100%);
+  border: 1px solid rgba(255, 220, 160, 0.8);
+  box-shadow: 0 0 14px rgba(255, 150, 50, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  transform: translate(0px, 0px);
+  will-change: transform;
+  transition: transform 0.05s ease-out;
+}
+
+.joystick-hint {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #94a3b8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  text-transform: uppercase;
+}
+
+/* Mobile Flight Actions (Altitude & Boost) */
+.mobile-actions {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  touch-action: none;
+}
+
+.touch-btn {
+  background: rgba(14, 18, 28, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f1f5f9;
+  border-radius: 12px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.touch-btn:active, .touch-btn.active {
+  background: rgba(255, 150, 40, 0.32);
+  border-color: rgba(255, 180, 80, 0.85);
+  box-shadow: 0 0 16px rgba(255, 150, 50, 0.55);
+  transform: scale(0.93);
+}
+
+.touch-btn-boost {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border-color: rgba(255, 170, 70, 0.45);
+  background: radial-gradient(circle, rgba(255, 150, 40, 0.25) 0%, rgba(14, 18, 28, 0.78) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.touch-btn-boost .btn-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.touch-btn-boost .btn-txt {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffb766;
+}
+
+.touch-altitude-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.touch-btn-alt {
+  width: 44px;
+  height: 40px;
+  font-size: 14px;
+}
+
+/* --- Comprehensive Responsive Adjustments --- */
 @media (max-width: 768px) {
   #ui-overlay {
-    padding: 16px 20px;
+    padding: max(12px, var(--sat)) max(12px, var(--sar)) max(10px, var(--sab)) max(12px, var(--sal));
+    gap: 8px;
   }
+
+  .top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .header {
+    max-width: 100%;
+  }
+
   .title {
-    font-size: 24px;
+    font-size: 20px;
+    letter-spacing: 2px;
   }
-  .controls-panel {
+
+  .subtitle {
+    font-size: 11px;
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .controls-hint {
+    margin-top: 6px;
+    padding: 5px 9px;
+    font-size: 10px;
     gap: 6px;
-    padding: 8px 12px;
+    max-width: 100%;
   }
-  .btn {
-    font-size: 12px;
+
+  .top-right-col {
+    width: 100%;
+    max-width: 100%;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .telemetry-hud {
+    flex: 1;
     padding: 6px 10px;
+    border-radius: 10px;
+  }
+
+  .telemetry-header {
+    font-size: 8px;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .telemetry-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    text-align: center;
+  }
+
+  .telemetry-item {
+    align-items: center;
+  }
+
+  .telemetry-label {
+    font-size: 7.5px;
+    letter-spacing: 0.5px;
+  }
+
+  .telemetry-value {
+    font-size: 11px;
+  }
+
+  .telemetry-value .unit {
+    font-size: 9px;
+  }
+
+  #btn-toggle-ui {
+    width: 44px;
+    min-width: 44px;
+    height: auto;
+    padding: 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
+  #btn-toggle-ui .toggle-text {
+    display: none;
+  }
+
+  #btn-toggle-ui .toggle-icon {
+    font-size: 18px;
+  }
+
+  body.ui-hidden #btn-toggle-ui {
+    position: fixed;
+    top: max(14px, var(--sat));
+    right: max(14px, var(--sar));
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    padding: 0;
+    z-index: 99;
+  }
+
+  /* Controls Panel on Mobile */
+  .controls-panel {
+    max-width: 100%;
+    width: 100%;
+    padding: 6px 8px;
+    gap: 6px;
+    border-radius: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .btn-preset, #btn-metric-toggle, .btn-metric, .btn-fx, .btn-util {
+    width: auto !important;
+    min-width: unset;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    font-size: 11px;
+    padding: 6px 9px;
+    height: 36px;
+    border-radius: 8px;
+    gap: 4px;
+  }
+
+  .divider {
+    height: 18px;
+    margin: 0 2px;
+  }
+
+  .slider-group {
+    font-size: 11px;
+    gap: 5px;
+    padding: 0 2px;
+  }
+
+  .slider-group input[type="range"] {
+    width: 55px;
+  }
+
+  #speed-val {
+    width: 26px;
+  }
+
+  /* Toast on mobile */
+  .toast {
+    bottom: max(68px, calc(var(--sab) + 58px));
+    font-size: 12px;
+    padding: 8px 16px;
+    max-width: 90vw;
+    text-align: center;
+  }
+
+  /* Preloader on mobile */
+  .preloader-content {
+    padding: 16px;
+    max-width: 90vw;
+  }
+  .preloader-title {
+    font-size: 24px;
+    letter-spacing: 3px;
+  }
+  .preloader-spinner-container {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 16px;
+  }
+  .preloader-status {
+    font-size: 11.5px;
+    margin-bottom: 16px;
+  }
+  .preloader-bar {
+    width: 160px;
   }
 }
 
@@ -612,4 +940,111 @@ body.ui-hidden #btn-toggle-ui {
   border-radius: 3px;
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.85);
   transition: width 0.35s ease-out;
+}
+
+/* --- Mobile Landscape Enhancements (phones tilted horizontally) --- */
+@media (max-height: 520px) and (orientation: landscape) {
+  #ui-overlay {
+    padding: max(8px, var(--sat)) max(12px, var(--sar)) max(8px, var(--sab)) max(12px, var(--sal));
+  }
+
+  .top-bar {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .header {
+    max-width: 380px;
+  }
+
+  .title {
+    font-size: 18px;
+    letter-spacing: 2px;
+  }
+
+  .subtitle {
+    display: none;
+  }
+
+  .controls-hint {
+    margin-top: 4px;
+    padding: 4px 8px;
+    font-size: 9.5px;
+  }
+
+  .top-right-col {
+    width: 320px;
+    gap: 4px;
+  }
+
+  .telemetry-hud {
+    padding: 5px 8px;
+    border-radius: 8px;
+  }
+
+  .telemetry-header {
+    font-size: 8px;
+    margin-bottom: 2px;
+  }
+
+  .telemetry-grid {
+    grid-template-columns: 75px 65px 1fr;
+    gap: 6px;
+  }
+
+  .telemetry-label {
+    font-size: 7.5px;
+  }
+
+  .telemetry-value {
+    font-size: 10.5px;
+  }
+
+  #btn-toggle-ui {
+    padding: 4px 10px;
+    font-size: 10.5px;
+    border-radius: 8px;
+  }
+
+  .mobile-controls {
+    margin-bottom: 2px;
+    padding: 0 4px;
+  }
+
+  .joystick-base {
+    width: 72px;
+    height: 72px;
+  }
+
+  .joystick-knob {
+    width: 34px;
+    height: 34px;
+  }
+
+  .touch-btn-boost {
+    width: 40px;
+    height: 40px;
+  }
+
+  .touch-btn-boost .btn-icon {
+    font-size: 14px;
+  }
+
+  .touch-btn-alt {
+    width: 38px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .controls-panel {
+    padding: 4px 8px;
+    gap: 4px;
+    border-radius: 10px;
+  }
+
+  .btn {
+    height: 32px;
+    padding: 4px 8px;
+    font-size: 10.5px;
+  }
 }

@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Гаргантюа — Симуляция Чёрной Дыры</title>
   <link rel="stylesheet" href="./src/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22black%22 stroke=%22%23ff9933%22 stroke-width=%228%22/></svg>">
@@ -45,7 +45,7 @@
         <h1 class="title">ГАРГАНТЮА</h1>
         <p class="subtitle">Сверхмассивная чёрная дыра и гравитационное линзирование</p>
 
-        <div class="controls-hint">
+        <div id="controls-hint" class="controls-hint">
           <span class="mouse-icon">🚀</span>
           <span><strong>WASD</strong> — полёт в космосе • <strong>Зажмите ЛКМ</strong> для обзора 360° • <strong>Shift</strong> — ускорение • <strong>Space / C</strong> — вверх / вниз</span>
         </div>
@@ -78,6 +78,33 @@
           <span class="toggle-icon">👁</span>
           <span class="toggle-text">Скрыть интерфейс</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Mobile Touch Flight Controls (Virtual Joystick & Altitude / Boost) -->
+    <div id="mobile-controls" class="mobile-controls">
+      <!-- Left: Analog Virtual Joystick for Flight Propulsion & Strafing -->
+      <div id="joystick-zone" class="joystick-zone">
+        <div id="joystick-base" class="joystick-base">
+          <div id="joystick-knob" class="joystick-knob"></div>
+        </div>
+        <div class="joystick-hint">ТЯГА / МАНЕВР</div>
+      </div>
+
+      <!-- Right: Touch Altitude & Turbo Boost -->
+      <div class="mobile-actions">
+        <button id="btn-touch-boost" class="touch-btn touch-btn-boost" type="button" title="Форсаж ускорения">
+          <span class="btn-icon">🚀</span>
+          <span class="btn-txt">ФОРСАЖ</span>
+        </button>
+        <div class="touch-altitude-group">
+          <button id="btn-touch-up" class="touch-btn touch-btn-alt" type="button" title="Набор высоты (Вверх)">
+            <span>▲</span>
+          </button>
+          <button id="btn-touch-down" class="touch-btn touch-btn-alt" type="button" title="Снижение (Вниз)">
+            <span>▼</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -148,13 +175,19 @@
     const toggleText = btnToggleUI ? btnToggleUI.querySelector('.toggle-text') : null;
     let uiVisible = true;
 
+    window.toggleUIVisibility = function(force) {
+      uiVisible = (typeof force === 'boolean') ? force : !uiVisible;
+      document.body.classList.toggle('ui-hidden', !uiVisible);
+      if (toggleText) {
+        toggleText.textContent = uiVisible ? 'Скрыть интерфейс' : 'Показать интерфейс';
+      }
+      return uiVisible;
+    };
+
     if (btnToggleUI) {
-      btnToggleUI.addEventListener('click', () => {
-        uiVisible = !uiVisible;
-        document.body.classList.toggle('ui-hidden', !uiVisible);
-        if (toggleText) {
-          toggleText.textContent = uiVisible ? 'Скрыть интерфейс' : 'Показать интерфейс';
-        }
+      btnToggleUI.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.toggleUIVisibility();
       });
     }
   </script>

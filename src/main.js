@@ -32,9 +32,23 @@ const canvasContainer = document.getElementById('canvas-container');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Optimal pixel ratio: cap at 1.25 to prevent 4K/5K fillrate bottlenecks on High-DPI displays while keeping 100% sharp visuals
-const targetDPR = Math.min(window.devicePixelRatio || 1.0, 1.25);
-renderer.setPixelRatio(targetDPR);
+// Mobile & Touch Device Detection (Portrait + Landscape mobile screens)
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
+const isMobileDevice = isTouchDevice || (window.innerWidth <= 900) || (window.innerHeight <= 520);
+const isMobile = isMobileDevice;
+
+function getOptimalDPR() {
+  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
+  // Cap at 1.0 on mobile to guarantee smooth 60 FPS raymarching while retaining crisp visuals
+  return Math.min(window.devicePixelRatio || 1.0, mobile ? 1.0 : 1.25);
+}
+
+function getBloomScale() {
+  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
+  return mobile ? 0.35 : 0.5;
+}
+
+renderer.setPixelRatio(getOptimalDPR());
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 canvasContainer.appendChild(renderer.domElement);
@@ -67,8 +81,19 @@ if (urlParams.has('camX') && urlParams.has('camY') && urlParams.has('camZ')) {
   }
 }
 
-// --- Space Flight Controls (WASD Flight + 360° Free Mouse Look) ---
+// --- Space Flight Controls (WASD / Touch Flight + 360° Free Look) ---
 const controls = new SpaceFlightControls(camera, renderer.domElement);
+window.controls = controls;
+window.camera = camera;
+
+// Dynamic touch hint for mobile users
+const controlsHint = document.getElementById('controls-hint');
+if (controlsHint && (isTouchDevice || isMobileDevice)) {
+  controlsHint.innerHTML = `
+    <span class="mouse-icon">🚀</span>
+    <span><strong>1 палец</strong> — обзор 360° • <strong>2 пальца</strong> — зум / тяга • <strong>Джойстик</strong> — полёт</span>
+  `;
+}
 
 // --- Preloader & Asset Loading Manager ---
 const preloaderStatus = document.getElementById('preloader-status');
@@ -125,9 +150,10 @@ scene.add(blackHoleMesh);
 // --- Post-Processing (Balanced, Cinematic Bloom) ---
 const renderScene = new RenderPass(scene, camera);
 
-// Half-resolution bloom buffer: standard real-time practice for soft filmic glow with ~4x lower memory bandwidth
-const bloomWidth = Math.max(256, Math.floor(window.innerWidth * 0.5));
-const bloomHeight = Math.max(256, Math.floor(window.innerHeight * 0.5));
+// Adaptive bloom buffer: 0.35x on mobile for high fillrate, 0.5x on desktop
+const bloomScale = getBloomScale();
+const bloomWidth = Math.max(128, Math.floor(window.innerWidth * bloomScale));
+const bloomHeight = Math.max(128, Math.floor(window.innerHeight * bloomScale));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(bloomWidth, bloomHeight),
   0.42,  // bloom strength
@@ -641,8 +667,8 @@ try {
 
 animate();
 
-// --- Resize Handler ---
-window.addEventListener('resize', () => {
+// --- Resize & Orientation Change Handlers ---
+function handleResize() {
   const width = window.innerWidth;
   const height = window.innerHeight;
 
@@ -650,8 +676,17 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 
   renderer.setSize(width, height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1.0, 1.25));
+  renderer.setPixelRatio(getOptimalDPR());
 
   composer.setSize(width, height);
-  bloomPass.setSize(Math.max(256, Math.floor(width * 0.5)), Math.max(256, Math.floor(height * 0.5)));
+  const bScale = getBloomScale();
+  bloomPass.setSize(
+    Math.max(128, Math.floor(width * bScale)),
+    Math.max(128, Math.floor(height * bScale))
+  );
+}
+
+window.addEventListener('resize', handleResize);
+window.addEventListener('orientationchange', () => {
+  setTimeout(handleResize, 120);
 });

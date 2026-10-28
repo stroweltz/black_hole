@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 
 /**
- * Cinematic 6-DOF Space Flight & Free Mouse-Look Controller
- * - 360° Free Mouse Drag: rotate view in arbitrary directions with inertia and damping
+ * Cinematic 6-DOF Space Flight & Free Mouse-Look / Touch Controller
+ * - 360° Free Mouse & Touch Drag: rotate view in arbitrary directions with inertia and damping
+ * - 2-Finger Pinch: intuitive forward/backward thrust zoom on mobile
+ * - Virtual Analog Joystick: proportional 360° flight maneuvering on touch devices
+ * - Altitude & Boost Controls: climb (▲), descent (▼), and turbo boost (🚀)
  * - WASD Flight: smooth relativistic spacecraft propulsion with inertia
  * - Space / C: vertical climb and descent
  * - Shift: turbo boost
@@ -35,11 +38,20 @@ export class SpaceFlightControls {
       boost: false
     };
 
-    // Mouse drag configuration
+    // Mobile Analog Input (Joystick: x [-1, 1] strafe, y [-1, 1] thrust)
+    this.analogMove = new THREE.Vector2(0, 0);
+
+    // Mouse & Touch drag configuration
     this.isDragging = false;
     this.prevMouse = { x: 0, y: 0 };
     this.rotateSpeed = 0.0026;
     this.rotDamping = 0.12;
+
+    // Multi-touch gestures
+    this.isPinching = false;
+    this.prevPinchDist = 0;
+    this.lastTapTime = 0;
+    this.lastTapPos = { x: 0, y: 0 };
 
     // Boundary constraints (Schwarzschild radius = 1.0, horizon = 1.005)
     // Allows flying deep to the razor edge of the horizon (r = 1.015) where shadow engulfs ~97.4% of the sky!
@@ -63,6 +75,7 @@ export class SpaceFlightControls {
 
     this.initOrientation();
     this.bindEvents();
+    this.initTouchControls();
   }
 
   setInteracting() {
@@ -84,7 +97,7 @@ export class SpaceFlightControls {
   }
 
   bindEvents() {
-    // Mouse Drag Listeners
+    // --- Mouse Drag Listeners ---
     this.domElement.addEventListener('mousedown', (e) => {
       if (e.button === 0 || e.button === 2) {
         this.isDragging = true;
@@ -115,7 +128,88 @@ export class SpaceFlightControls {
       this.isDragging = false;
     });
 
-    // Mouse Wheel Forward/Backward Impulse
+    // --- Touch Screen Gestures (1-Finger Rotation & 2-Finger Pinch Thrust) ---
+    this.domElement.addEventListener('touchstart', (e) => {
+      this.setInteracting();
+      if (this.isResetting) this.isResetting = false;
+
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        this.isDragging = true;
+        this.isPinching = false;
+        this.prevMouse.x = touch.clientX;
+        this.prevMouse.y = touch.clientY;
+
+        // Double tap on canvas toggles UI
+        const now = performance.now();
+        const dist = Math.hypot(touch.clientX - this.lastTapPos.x, touch.clientY - this.lastTapPos.y);
+        if (now - this.lastTapTime < 320 && dist < 32) {
+          if (typeof window.toggleUIVisibility === 'function') {
+            window.toggleUIVisibility();
+          }
+          this.lastTapTime = 0;
+        } else {
+          this.lastTapTime = now;
+          this.lastTapPos.x = touch.clientX;
+          this.lastTapPos.y = touch.clientY;
+        }
+      } else if (e.touches.length >= 2) {
+        this.isDragging = false;
+        this.isPinching = true;
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        this.prevPinchDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!this.isDragging && !this.isPinching) return;
+      this.setInteracting();
+
+      if (this.isDragging && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - this.prevMouse.x;
+        const dy = touch.clientY - this.prevMouse.y;
+        this.prevMouse.x = touch.clientX;
+        this.prevMouse.y = touch.clientY;
+
+        this.targetYaw -= dx * this.rotateSpeed * 1.15;
+        this.targetPitch -= dy * this.rotateSpeed * 1.15;
+
+        const maxPitch = Math.PI * 0.485;
+        this.targetPitch = Math.max(-maxPitch, Math.min(maxPitch, this.targetPitch));
+      } else if (this.isPinching && e.touches.length >= 2) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+        const deltaDist = dist - this.prevPinchDist;
+        this.prevPinchDist = dist;
+
+        const forward = new THREE.Vector3();
+        this.camera.getWorldDirection(forward);
+        const r = this.camera.position.length();
+        // Pinch expansion -> forward impulse; pinch compression -> backward impulse
+        const impulse = deltaDist * Math.max(0.002, r * 0.00065);
+        this.velocity.addScaledVector(forward, impulse);
+      }
+    }, { passive: true });
+
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) {
+        this.isDragging = false;
+        this.isPinching = false;
+      } else if (e.touches.length === 1) {
+        this.isPinching = false;
+        this.isDragging = true;
+        this.prevMouse.x = e.touches[0].clientX;
+        this.prevMouse.y = e.touches[0].clientY;
+      }
+    };
+
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    // --- Mouse Wheel Forward/Backward Impulse ---
     this.domElement.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.setInteracting();
@@ -132,7 +226,7 @@ export class SpaceFlightControls {
     // Prevent context menu on right click
     this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Keyboard Flight Listeners
+    // --- Keyboard Flight Listeners ---
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       this.handleKey(e.code, true);
@@ -143,6 +237,169 @@ export class SpaceFlightControls {
       this.handleKey(e.code, false);
       if (!e.shiftKey) this.keys.boost = false;
     });
+  }
+
+  /**
+   * Initialize on-screen touch flight controls (Analog Joystick & Thrusters)
+   */
+  initTouchControls() {
+    const joystickBase = document.getElementById('joystick-base');
+    const joystickKnob = document.getElementById('joystick-knob');
+    const btnTouchUp = document.getElementById('btn-touch-up');
+    const btnTouchDown = document.getElementById('btn-touch-down');
+    const btnTouchBoost = document.getElementById('btn-touch-boost');
+
+    if (joystickBase && joystickKnob) {
+      let activeTouchId = null;
+      let baseCenter = { x: 0, y: 0 };
+      const maxRadius = 36; // px
+
+      const onJoyStart = (e) => {
+        if (activeTouchId !== null) return;
+        const touch = e.changedTouches ? e.changedTouches[0] : e;
+        activeTouchId = touch.identifier !== undefined ? touch.identifier : 'mouse';
+
+        const rect = joystickBase.getBoundingClientRect();
+        baseCenter.x = rect.left + rect.width / 2;
+        baseCenter.y = rect.top + rect.height / 2;
+
+        this.setInteracting();
+        if (this.isResetting) this.isResetting = false;
+
+        updateJoyKnob(touch.clientX, touch.clientY);
+      };
+
+      const updateJoyKnob = (clientX, clientY) => {
+        let dx = clientX - baseCenter.x;
+        let dy = clientY - baseCenter.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > maxRadius) {
+          dx = (dx / dist) * maxRadius;
+          dy = (dy / dist) * maxRadius;
+        }
+
+        joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        // Proportional normalized vector [-1, 1]
+        this.analogMove.x = dx / maxRadius;
+        this.analogMove.y = dy / maxRadius;
+      };
+
+      const onJoyMove = (e) => {
+        if (activeTouchId === null) return;
+        let touch = null;
+        if (e.changedTouches) {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === activeTouchId) {
+              touch = e.changedTouches[i];
+              break;
+            }
+          }
+        } else if (activeTouchId === 'mouse') {
+          touch = e;
+        }
+        if (!touch) return;
+        e.preventDefault();
+        this.setInteracting();
+        updateJoyKnob(touch.clientX, touch.clientY);
+      };
+
+      const onJoyEnd = (e) => {
+        if (activeTouchId === null) return;
+        let matched = false;
+        if (e.changedTouches) {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === activeTouchId) {
+              matched = true;
+              break;
+            }
+          }
+        } else if (activeTouchId === 'mouse') {
+          matched = true;
+        }
+        if (!matched) return;
+
+        activeTouchId = null;
+        joystickKnob.style.transform = 'translate(0px, 0px)';
+        this.analogMove.set(0, 0);
+      };
+
+      joystickBase.addEventListener('touchstart', onJoyStart, { passive: false });
+      window.addEventListener('touchmove', onJoyMove, { passive: false });
+      window.addEventListener('touchend', onJoyEnd);
+      window.addEventListener('touchcancel', onJoyEnd);
+
+      // Support mouse preview for testing in DevTools Responsive Mode
+      joystickBase.addEventListener('mousedown', onJoyStart);
+      window.addEventListener('mousemove', (e) => {
+        if (activeTouchId === 'mouse') {
+          this.setInteracting();
+          updateJoyKnob(e.clientX, e.clientY);
+        }
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (activeTouchId === 'mouse') {
+          activeTouchId = null;
+          joystickKnob.style.transform = 'translate(0px, 0px)';
+          this.analogMove.set(0, 0);
+        }
+      });
+    }
+
+    // Touch Altitude Elevation Controls
+    if (btnTouchUp) {
+      const startUp = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.keys.up = true;
+        btnTouchUp.classList.add('active');
+        this.setInteracting();
+        if (this.isResetting) this.isResetting = false;
+      };
+      const endUp = (e) => {
+        e.preventDefault();
+        this.keys.up = false;
+        btnTouchUp.classList.remove('active');
+      };
+      btnTouchUp.addEventListener('touchstart', startUp, { passive: false });
+      btnTouchUp.addEventListener('touchend', endUp);
+      btnTouchUp.addEventListener('touchcancel', endUp);
+      btnTouchUp.addEventListener('mousedown', startUp);
+      btnTouchUp.addEventListener('mouseup', endUp);
+    }
+
+    if (btnTouchDown) {
+      const startDown = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.keys.down = true;
+        btnTouchDown.classList.add('active');
+        this.setInteracting();
+        if (this.isResetting) this.isResetting = false;
+      };
+      const endDown = (e) => {
+        e.preventDefault();
+        this.keys.down = false;
+        btnTouchDown.classList.remove('active');
+      };
+      btnTouchDown.addEventListener('touchstart', startDown, { passive: false });
+      btnTouchDown.addEventListener('touchend', endDown);
+      btnTouchDown.addEventListener('touchcancel', endDown);
+      btnTouchDown.addEventListener('mousedown', startDown);
+      btnTouchDown.addEventListener('mouseup', endDown);
+    }
+
+    // Touch Turbo Boost (Toggle on mobile tap)
+    if (btnTouchBoost) {
+      const toggleBoost = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.keys.boost = !this.keys.boost;
+        btnTouchBoost.classList.toggle('active', this.keys.boost);
+        this.setInteracting();
+      };
+      btnTouchBoost.addEventListener('click', toggleBoost);
+    }
   }
 
   handleKey(code, isDown) {
@@ -257,6 +514,14 @@ export class SpaceFlightControls {
     if (this.keys.up) moveDir.add(up);
     if (this.keys.down) moveDir.sub(up);
 
+    // Analog stick contribution (analogMove.y: -1 = forward, +1 = backward; analogMove.x: -1 = left, +1 = right)
+    if (Math.abs(this.analogMove.y) > 0.04) {
+      moveDir.addScaledVector(forward, -this.analogMove.y);
+    }
+    if (Math.abs(this.analogMove.x) > 0.04) {
+      moveDir.addScaledVector(right, this.analogMove.x);
+    }
+
     const r = this.camera.position.length();
 
     // Scale speed dynamically with distance from the black hole (reduced by 8x total for ultra-smooth cinematic piloting)
@@ -265,8 +530,12 @@ export class SpaceFlightControls {
     if (this.keys.boost) baseSpeed *= 2.8;
 
     if (moveDir.lengthSq() > 0.0001) {
+      const analogMagnitude = Math.min(1.0, Math.max(
+        (this.keys.forward || this.keys.backward || this.keys.left || this.keys.right || this.keys.up || this.keys.down) ? 1.0 : 0.0,
+        this.analogMove.length()
+      ));
       moveDir.normalize();
-      const accel = baseSpeed * 5.2;
+      const accel = baseSpeed * 5.2 * (analogMagnitude > 0 ? analogMagnitude : 1.0);
       this.velocity.addScaledVector(moveDir, accel * delta);
     }
 
