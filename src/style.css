@@ -361,8 +361,8 @@ body.ui-hidden #btn-toggle-ui {
   flex-shrink: 0;
 }
 
-#btn-perf-toggle {
-  min-width: 95px;
+#btn-hq-toggle, #btn-perf-toggle {
+  min-width: 125px;
 }
 
 #btn-audio {

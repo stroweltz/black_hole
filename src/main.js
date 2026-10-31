@@ -71,20 +71,21 @@ console.log('%c[Gargantua GPU Diagnostics]', 'color: #38bdf8; font-weight: bold;
   resolution: `${window.innerWidth}x${window.innerHeight}`
 });
 
-// Performance Mode: defaults to true on mobile/touch or integrated GPUs, configurable on desktop
-let isPerformanceMode = isMobileDevice || gpuInfo.isIntegrated;
+// Quality Toggle: false = Eco (Silent, 30 FPS, cool GPU), true = HQ (Maximum Quality, native DPR 1.0)
+// Defaults to Eco to prevent laptop GPU thermal spikes and loud fan noise
+let isHQ = false;
 
 function getOptimalDPR() {
-  if (isPerformanceMode) {
-    // Mobile / iGPU Eco DPR: 0.75 saves ~44% fillrate while staying razor-sharp
-    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.75 : (gpuInfo.isIntegrated ? 0.75 : 0.85));
+  if (!isHQ) {
+    // Eco Mode: 0.75 saves ~44% fillrate while staying razor-sharp
+    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.75 : 0.78);
   }
-  // Max Quality mode: cap at 1.0 to prevent 4K/5K fillrate bottlenecks while keeping 100% native pixels
+  // Max Quality mode: 100% native resolution
   return Math.min(window.devicePixelRatio || 1.0, 1.0);
 }
 
 function getBloomScale() {
-  return isPerformanceMode ? 0.35 : 0.5;
+  return !isHQ ? 0.35 : 0.5;
 }
 
 renderer.setPixelRatio(getOptimalDPR());
@@ -173,7 +174,7 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
   defines: {
-    ...(isPerformanceMode ? { FAST_SKYBOX: '1' } : {})
+    ...(!isHQ ? { FAST_SKYBOX: '1' } : {})
   },
   side: THREE.BackSide,
   depthWrite: false,
@@ -306,51 +307,54 @@ const sliderSpeed = document.getElementById('slider-speed');
 const speedVal = document.getElementById('speed-val');
 const btnUploadBg = document.getElementById('btn-upload-bg');
 const inputBgFile = document.getElementById('input-bg-file');
-const btnPerfToggle = document.getElementById('btn-perf-toggle');
-const perfIcon = document.getElementById('perf-icon');
-const perfLabel = document.getElementById('perf-label');
+const btnHQToggle = document.getElementById('btn-hq-toggle') || document.getElementById('btn-perf-toggle');
+const hqIcon = document.getElementById('hq-icon') || document.getElementById('perf-icon');
+const hqLabel = document.getElementById('hq-label') || document.getElementById('perf-label');
 
-function updatePerfUI() {
-  if (!btnPerfToggle) return;
-  if (isPerformanceMode) {
-    btnPerfToggle.classList.add('active');
-    if (perfIcon) perfIcon.textContent = '⚡';
-    if (perfLabel) perfLabel.textContent = '60 FPS (Эко)';
-    btnPerfToggle.title = 'Режим: Эко (60 FPS). Нажмите для переключения на Максимальное качество [Горячая клавиша: E]';
+function updateHQ_UI() {
+  if (!btnHQToggle) return;
+  if (isHQ) {
+    btnHQToggle.classList.add('active');
+    if (hqIcon) hqIcon.textContent = '💎';
+    if (hqLabel) hqLabel.textContent = 'HQ Качество';
+    btnHQToggle.title = 'Максимальное качество включено (DPR 1.0, без ограничения FPS). Нажмите для перехода в тихий Эко-режим [E]';
   } else {
-    btnPerfToggle.classList.remove('active');
-    if (perfIcon) perfIcon.textContent = '💎';
-    if (perfLabel) perfLabel.textContent = 'Качество (HQ)';
-    btnPerfToggle.title = 'Режим: Макс. качество. Нажмите для включения 60 FPS (Эко) [Горячая клавиша: E]';
+    btnHQToggle.classList.remove('active');
+    if (hqIcon) hqIcon.textContent = '🍃';
+    if (hqLabel) hqLabel.textContent = 'Эко (тихий)';
+    btnHQToggle.title = 'Тихий Эко-режим (30 FPS, холодный GPU). Нажмите для включения Макс. качества [E]';
   }
 }
 
-function setPerformanceMode(enabled, showFeedback = true) {
-  isPerformanceMode = enabled;
+function setHQMode(enabled, showFeedback = true) {
+  isHQ = enabled;
   blackHoleMaterial.defines = {
-    ...(isPerformanceMode ? { FAST_SKYBOX: '1' } : {})
+    ...(!isHQ ? { FAST_SKYBOX: '1' } : {})
   };
   blackHoleMaterial.needsUpdate = true;
 
   handleResize();
-  updatePerfUI();
+  updateHQ_UI();
 
   if (showFeedback) {
-    showToast(isPerformanceMode ? '⚡ Включен режим 60 FPS (Эко)' : '💎 Включен режим максимального качества (HQ)');
+    showToast(isHQ 
+      ? '💎 Включено максимальное качество (HQ) • Нативное разрешение' 
+      : '🍃 Включен тихий Эко-режим • 30 FPS (холодный GPU, кулеры тише)'
+    );
   }
 }
 
-if (btnPerfToggle) {
-  btnPerfToggle.addEventListener('click', () => {
-    setPerformanceMode(!isPerformanceMode);
+if (btnHQToggle) {
+  btnHQToggle.addEventListener('click', () => {
+    setHQMode(!isHQ);
   });
-  updatePerfUI();
+  updateHQ_UI();
 }
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'e' || e.key === 'E' || e.key === 'у' || e.key === 'У') {
     if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-    setPerformanceMode(!isPerformanceMode);
+    setHQMode(!isHQ);
   }
 });
 
@@ -623,12 +627,24 @@ setTimeout(hidePreloader, 4000);
 let fpsFrameCount = 0;
 let lastFpsCheckTime = performance.now();
 
+// --- Frame Throttling for Silent Eco Mode (30 FPS) ---
+const ECO_FRAME_MIN_MS = 1000 / 30.0; // ~33.33ms
+let lastRenderTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
 
+  const now = performance.now();
+  if (!isHQ) {
+    const elapsedSinceLastRender = now - lastRenderTime;
+    if (elapsedSinceLastRender < ECO_FRAME_MIN_MS - 1.5) {
+      return; // Skip frame: lets the GPU cores rest and cool down!
+    }
+  }
+  lastRenderTime = now;
+
   // Update Real-Time FPS & Telemetry
   fpsFrameCount++;
-  const now = performance.now();
   if (now - lastFpsCheckTime >= 400) {
     const elapsed = now - lastFpsCheckTime;
     const currentFps = Math.round((fpsFrameCount * 1000) / elapsed);
@@ -636,14 +652,17 @@ function animate() {
     lastFpsCheckTime = now;
 
     if (telFps) {
-      telFps.innerHTML = `${currentFps} <span class="unit">FPS</span> <span style="font-size:10px;opacity:0.75;margin-left:4px;">[${gpuInfo.shortName}]</span>`;
-      telFps.title = `Видеокарта: ${gpuInfo.shortName}\nФактический рендерер: ${gpuInfo.raw}\nРежим: ${isPerformanceMode ? 'Эко (60 FPS)' : 'HQ (Качество)'}\nРазрешение рендера: ${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`;
-      if (currentFps >= 50) {
-        telFps.style.color = '#4ade80';
-      } else if (currentFps >= 30) {
-        telFps.style.color = '#facc15';
+      const modeTag = isHQ ? 'HQ' : 'Эко 30';
+      telFps.innerHTML = `${currentFps} <span class="unit">FPS</span> <span style="font-size:10px;opacity:0.85;margin-left:4px;">[${modeTag}]</span>`;
+      telFps.title = `Видеокарта: ${gpuInfo.shortName}\nФактический рендерер: ${gpuInfo.raw}\nРежим: ${isHQ ? 'HQ (Макс. качество, 100% DPR)' : 'Эко (тихий, 30 FPS, 78% DPR)'}\nРазрешение рендера: ${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`;
+      if (isHQ) {
+        if (currentFps >= 50) telFps.style.color = '#4ade80';
+        else if (currentFps >= 25) telFps.style.color = '#facc15';
+        else telFps.style.color = '#f87171';
       } else {
-        telFps.style.color = '#f87171';
+        if (currentFps >= 27) telFps.style.color = '#4ade80';
+        else if (currentFps >= 20) telFps.style.color = '#facc15';
+        else telFps.style.color = '#f87171';
       }
     }
   }
