@@ -77,8 +77,8 @@ let isHQ = false;
 
 function getOptimalDPR() {
   if (!isHQ) {
-    // Eco Mode: 0.75 saves ~44% fillrate while staying razor-sharp
-    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.75 : 0.78);
+    // Eco Mode: 0.72 saves ~48% fillrate, keeping laptop GPU cool and quiet
+    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.70 : 0.72);
   }
   // Max Quality mode: 100% native resolution
   return Math.min(window.devicePixelRatio || 1.0, 1.0);
@@ -630,6 +630,7 @@ let lastFpsCheckTime = performance.now();
 function animate() {
   requestAnimationFrame(animate);
 
+  const now = performance.now();
   // Update Real-Time FPS & Telemetry
   fpsFrameCount++;
   if (now - lastFpsCheckTime >= 400) {

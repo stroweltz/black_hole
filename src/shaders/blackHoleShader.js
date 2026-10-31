@@ -290,7 +290,11 @@ export const BlackHoleShader = {
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Conservatively tuned to eliminate boundary banding and preserve fine detail
+      #ifdef FAST_SKYBOX
+      const int MAX_STEPS = 72;
+#else
       const int MAX_STEPS = 100;
+#endif
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
@@ -408,7 +412,11 @@ export const BlackHoleShader = {
         // 5. Smooth continuous multi-scale step size:
         float stepSize;
         if (r > 6.0) {
+          #ifdef FAST_SKYBOX
+          stepSize = 0.55 + 0.15 * (r - 6.0);
+#else
           stepSize = 0.45 + 0.12 * (r - 6.0);
+#endif
         } else if (r > 2.0) {
           stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
