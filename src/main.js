@@ -37,14 +37,48 @@ const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 
 const isMobileDevice = isTouchDevice || (window.innerWidth <= 900) || (window.innerHeight <= 520);
 const isMobile = isMobileDevice;
 
-// Performance Mode: defaults to true on mobile/touch, configurable on desktop
-let isPerformanceMode = isMobileDevice;
+// --- GPU Diagnostics & Active Renderer Info ---
+function getGPUDiagnostics() {
+  const gl = renderer.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const unmaskedRenderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'Generic WebGL';
+  const isIntegrated = /Intel|HD Graphics|UHD Graphics|Iris|SwiftShader|Basic Render/i.test(unmaskedRenderer);
+  const isDiscrete = /NVIDIA|GeForce|Radeon|AMD/i.test(unmaskedRenderer);
+  
+  let shortName = 'GPU';
+  if (/GeForce\s+([A-Za-z0-9\s]+)/i.test(unmaskedRenderer)) {
+    const m = unmaskedRenderer.match(/GeForce\s+([A-Za-z0-9\s]+?)(?:\sDirect3D|\s\(|,|$)/i);
+    shortName = m ? `GeForce ${m[1].trim()}` : 'NVIDIA GeForce';
+  } else if (/Intel.*(HD|UHD|Iris)[^,)]*/i.test(unmaskedRenderer)) {
+    const m = unmaskedRenderer.match(/(Intel\(R\)\s+[A-Za-z0-9\s]+Graphics(?:\s+\d+)?)/i);
+    shortName = m ? m[1].replace('Intel(R)', 'Intel').trim() : 'Intel iGPU';
+  } else if (/SwiftShader/i.test(unmaskedRenderer)) {
+    shortName = 'SwiftShader (CPU)';
+  }
+
+  return {
+    raw: unmaskedRenderer,
+    isIntegrated,
+    isDiscrete,
+    shortName
+  };
+}
+const gpuInfo = getGPUDiagnostics();
+console.log('%c[Gargantua GPU Diagnostics]', 'color: #38bdf8; font-weight: bold;', {
+  gpu: gpuInfo.raw,
+  isIntegrated: gpuInfo.isIntegrated,
+  isDiscrete: gpuInfo.isDiscrete,
+  dpr: renderer.getPixelRatio(),
+  resolution: `${window.innerWidth}x${window.innerHeight}`
+});
+
+// Performance Mode: defaults to true on mobile/touch or integrated GPUs, configurable on desktop
+let isPerformanceMode = isMobileDevice || gpuInfo.isIntegrated;
 
 function getOptimalDPR() {
   if (isPerformanceMode) {
-    // Mobile DPR: 0.75 saves ~44% fillrate while staying razor-sharp at 320+ PPI
-    // Desktop Eco DPR: 0.85 saves ~28% fillrate for smooth 60 FPS
-    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.75 : 0.85);
+    // Mobile / iGPU Eco DPR: 0.75 saves ~44% fillrate while staying razor-sharp
+    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.75 : (gpuInfo.isIntegrated ? 0.75 : 0.85));
   }
   // Max Quality mode: cap at 1.0 to prevent 4K/5K fillrate bottlenecks while keeping 100% native pixels
   return Math.min(window.devicePixelRatio || 1.0, 1.0);
@@ -241,6 +275,7 @@ if (btnViewPortal) btnViewPortal.addEventListener('click', () => activatePreset(
 const telRadius = document.getElementById('tel-radius');
 const telShadow = document.getElementById('tel-shadow');
 const telDilation = document.getElementById('tel-dilation');
+const telFps = document.getElementById('tel-fps');
 const telemetryTitle = document.getElementById('telemetry-title');
 
 // Metric Mode: true = Kerr (extreme spin / Interstellar), false = Schwarzschild (static)
@@ -592,8 +627,34 @@ function hidePreloader() {
 // Fallback safety timeout ensures preloader never gets stuck if tab was initially in background
 setTimeout(hidePreloader, 4000);
 
+let fpsFrameCount = 0;
+let lastFpsCheckTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
+
+  // Update Real-Time FPS & Telemetry
+  fpsFrameCount++;
+  const now = performance.now();
+  if (now - lastFpsCheckTime >= 400) {
+    const elapsed = now - lastFpsCheckTime;
+    const currentFps = Math.round((fpsFrameCount * 1000) / elapsed);
+    const frameMs = (elapsed / fpsFrameCount).toFixed(1);
+    fpsFrameCount = 0;
+    lastFpsCheckTime = now;
+
+    if (telFps) {
+      telFps.innerHTML = `${currentFps} <span class="unit">FPS</span> <span style="font-size:10px;opacity:0.75;margin-left:4px;">[${gpuInfo.shortName}]</span>`;
+      telFps.title = `Видеокарта: ${gpuInfo.shortName}\nФактический рендерер: ${gpuInfo.raw}\nРежим: ${isPerformanceMode ? 'Эко (60 FPS)' : 'HQ (Качество)'}\nРазрешение рендера: ${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`;
+      if (currentFps >= 50) {
+        telFps.style.color = '#4ade80';
+      } else if (currentFps >= 30) {
+        telFps.style.color = '#facc15';
+      } else {
+        telFps.style.color = '#f87171';
+      }
+    }
+  }
 
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();

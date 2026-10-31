@@ -323,7 +323,7 @@ export const BlackHoleShader = {
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
       // Optimized for high performance and seamless whole-space relativistic integration
-      const int MAX_STEPS = 100;
+      const int MAX_STEPS = 80;
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
@@ -437,14 +437,28 @@ export const BlackHoleShader = {
           }
         }
 
-        // 5. Smooth continuous multi-scale step size:
+        // 5. Continuous C0 multi-scale step size matching cleanly across all radii
         float stepSize;
         if (r > 6.0) {
-          stepSize = 0.45 + 0.12 * (r - 6.0);
+          stepSize = 0.35 + 0.22 * (r - 6.0);
         } else if (r > 2.0) {
-          stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
+          stepSize = clamp(0.060 * r - 0.010, 0.040, 0.35);
         } else {
-          stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
+          stepSize = clamp(0.18 * (r - r_eh) + 0.005, 0.004, 0.12);
+        }
+
+        // Exact boundary landing at r = 13.0 for rays escaping beyond accretion disk (r > 10.3):
+        // Eliminates step-count discretization rings and enables outward-bound rays to exit in 1 step!
+        float radAlign = dot(rayPos, rayDir);
+        if (radAlign > 0.0 && r > 10.3) {
+          float C = r * r - 169.0;
+          float discr = radAlign * radAlign - C;
+          if (discr > 0.0) {
+            float dTo13 = -radAlign + sqrt(discr);
+            if (dTo13 > 0.0) {
+              stepSize = dTo13;
+            }
+          }
         }
 
         // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
@@ -459,10 +473,9 @@ export const BlackHoleShader = {
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
         // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
-        // Evaluates 1/r^5 using fast algebraic multiplication, bypassing expensive SFU pow()
+        // Evaluates 1/r^5 using hardware inversesqrt and fast algebraic multiplication
         vec3 halfPos = rayPos + rayDir * (stepSize * 0.5);
-        float halfR = length(halfPos);
-        float invHalfR = 1.0 / max(halfR, 1e-4);
+        float invHalfR = inversesqrt(dot(halfPos, halfPos));
         float inv5 = invHalfR * invHalfR * invHalfR * invHalfR * invHalfR;
         vec3 accel = - 1.5 * rs * (initH2 * inv5) * halfPos;
 
