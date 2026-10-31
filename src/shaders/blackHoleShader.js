@@ -309,21 +309,14 @@ export const BlackHoleShader = {
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
 
-      // Conserved Relativistic Angular Momentum Invariant h = r x v
-      // In Schwarzschild metric, angular momentum is strictly conserved along every geodesic!
-      // Calculating orbital plane distance once before the loop saves ~100 cross/dot/sqrt operations per pixel.
-      vec3 initH = cross(rayPos, rayDir);
-      float initH2 = dot(initH, initH);
-      bool canHitPlanet = (uPlanetVisible > 0.5) && (abs(dot(uPlanetPos, initH)) / max(sqrt(initH2), 1e-4) < 0.55);
-
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
       float minRadius = 1e6;
       bool hitHorizon = false;
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
-      // Optimized for high performance and seamless whole-space relativistic integration
-      const int MAX_STEPS = 80;
+      // Conservatively tuned to eliminate boundary banding and preserve fine detail
+      const int MAX_STEPS = 100;
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
@@ -341,44 +334,47 @@ export const BlackHoleShader = {
           break;
         }
 
-        // 3. Planet pre-cull & segment hit detection (deferred length calculations)
+        // 3. Planet pre-cull & segment hit detection
+        vec3 seg = rayPos - prevPos;
+        float segLen = length(seg);
+        vec3 segDir = (segLen > 1e-5) ? (seg / segLen) : rayDir;
+
         bool hitPlanetThisStep = false;
         float tHitPlanet = 1e6;
         vec3 pHitPos = vec3(0.0);
         vec3 pNorm = vec3(0.0, 1.0, 0.0);
-        vec3 pViewDir = rayDir;
-        float segLen = 0.0;
+        vec3 pViewDir = segDir;
 
-        if (canHitPlanet && i > 0 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
-          vec3 toP = prevPos - uPlanetPos;
-          float toP2 = dot(toP, toP);
-          if (toP2 < 2.0) {
-            vec3 seg = rayPos - prevPos;
-            segLen = length(seg);
-            if (segLen > 1e-5) {
-              vec3 segDir = seg / segLen;
-              float pRad = 0.22;
-              float boundR = segLen + pRad + 0.35;
-              if (toP2 < boundR * boundR) {
-                float b = dot(toP, segDir);
-                float c = toP2 - pRad * pRad;
-                float discr = b * b - c;
-                if (discr >= 0.0) {
-                  float sqrtD = sqrt(discr);
-                  float t1 = -b - sqrtD;
-                  if (c < 0.0) {
-                    tHitPlanet = 0.0;
-                    hitPlanetThisStep = true;
-                    pHitPos = prevPos;
-                    pNorm = normalize(pHitPos - uPlanetPos);
-                    pViewDir = segDir;
-                  } else if (t1 >= 0.0 && t1 <= segLen) {
-                    tHitPlanet = t1;
-                    hitPlanetThisStep = true;
-                    pHitPos = prevPos + segDir * t1;
-                    pNorm = normalize(pHitPos - uPlanetPos);
-                    pViewDir = segDir;
-                  }
+        // Geodesic orbital plane invariant pre-cull
+        vec3 currH = cross(rayPos, rayDir);
+        float currH2 = dot(currH, currH);
+        bool canHitPlanet = (uPlanetVisible > 0.5) && (abs(dot(uPlanetPos, currH)) / max(sqrt(currH2), 1e-4) < 0.55);
+
+        if (canHitPlanet && i > 0 && segLen > 1e-5) {
+          if (abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
+            vec3 toP = prevPos - uPlanetPos;
+            float toP2 = dot(toP, toP);
+            float pRad = 0.22;
+            float boundR = segLen + pRad + 0.35;
+            if (toP2 < boundR * boundR) {
+              float b = dot(toP, segDir);
+              float c = toP2 - pRad * pRad;
+              float discr = b * b - c;
+              if (discr >= 0.0) {
+                float sqrtD = sqrt(discr);
+                float t1 = -b - sqrtD;
+                if (c < 0.0) {
+                  tHitPlanet = 0.0;
+                  hitPlanetThisStep = true;
+                  pHitPos = prevPos;
+                  pNorm = normalize(pHitPos - uPlanetPos);
+                  pViewDir = segDir;
+                } else if (t1 >= 0.0 && t1 <= segLen) {
+                  tHitPlanet = t1;
+                  hitPlanetThisStep = true;
+                  pHitPos = prevPos + segDir * t1;
+                  pNorm = normalize(pHitPos - uPlanetPos);
+                  pViewDir = segDir;
                 }
               }
             }
@@ -397,7 +393,6 @@ export const BlackHoleShader = {
           if (hitR2 >= 6.15 && hitR2 <= 104.04) {
             hitDiskThisStep = true;
             if (hitPlanetThisStep) {
-              if (segLen <= 0.0) segLen = length(rayPos - prevPos);
               tHitDisk = uCross * segLen;
             }
           }
@@ -437,28 +432,14 @@ export const BlackHoleShader = {
           }
         }
 
-        // 5. Continuous C0 multi-scale step size matching cleanly across all radii
+        // 5. Smooth continuous multi-scale step size:
         float stepSize;
         if (r > 6.0) {
-          stepSize = 0.35 + 0.22 * (r - 6.0);
+          stepSize = 0.45 + 0.12 * (r - 6.0);
         } else if (r > 2.0) {
-          stepSize = clamp(0.060 * r - 0.010, 0.040, 0.35);
+          stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
         } else {
-          stepSize = clamp(0.18 * (r - r_eh) + 0.005, 0.004, 0.12);
-        }
-
-        // Exact boundary landing at r = 13.0 for rays escaping beyond accretion disk (r > 10.3):
-        // Eliminates step-count discretization rings and enables outward-bound rays to exit in 1 step!
-        float radAlign = dot(rayPos, rayDir);
-        if (radAlign > 0.0 && r > 10.3) {
-          float C = r * r - 169.0;
-          float discr = radAlign * radAlign - C;
-          if (discr > 0.0) {
-            float dTo13 = -radAlign + sqrt(discr);
-            if (dTo13 > 0.0) {
-              stepSize = dTo13;
-            }
-          }
+          stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
         }
 
         // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
@@ -473,11 +454,11 @@ export const BlackHoleShader = {
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
         // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
-        // Evaluates 1/r^5 using hardware inversesqrt and fast algebraic multiplication
         vec3 halfPos = rayPos + rayDir * (stepSize * 0.5);
-        float invHalfR = inversesqrt(dot(halfPos, halfPos));
-        float inv5 = invHalfR * invHalfR * invHalfR * invHalfR * invHalfR;
-        vec3 accel = - 1.5 * rs * (initH2 * inv5) * halfPos;
+        float halfR = length(halfPos);
+        vec3 hVec = cross(halfPos, rayDir);
+        float h2 = dot(hVec, hVec);
+        vec3 accel = - 1.5 * rs * (h2 / (pow(halfR, 5.0) + 1e-5)) * halfPos;
 
         rayDir = normalize(rayDir + accel * stepSize);
         prevPos = rayPos;
