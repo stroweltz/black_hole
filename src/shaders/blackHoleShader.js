@@ -442,15 +442,8 @@ export const BlackHoleShader = {
           stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
         }
 
-        // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
-        if (canHitPlanet) {
-          vec3 toPlanet = rayPos - uPlanetPos;
-          float dP2 = dot(toPlanet, toPlanet);
-          if (dP2 < 0.81) {
-            float dP = sqrt(dP2);
-            stepSize = min(stepSize, max(0.035, (dP - 0.20) * 0.42));
-          }
-        }
+        // Miller's planet is intersected analytically along segments (section 3);
+        // keeping geodesic stepSize continuous preserves razor-sharp event horizon geometry and prevents artificial background distortion.
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
         // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
