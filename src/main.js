@@ -212,6 +212,8 @@ composer.addPass(outputPass);
 
 // --- Audio ---
 const cosmicAudio = new CosmicAudio();
+window.cosmicAudio = cosmicAudio;
+cosmicAudio.preload();
 
 // --- State & Animation Parameters ---
 let diskSpeedMultiplier = 0.85;
@@ -883,11 +885,11 @@ function animate() {
   // Update space flight controls (WASD movement & smooth mouse rotation)
   controls.update(delta);
 
+  let shadowFrac = 0.0;
   // Update dynamic relativistic flight telemetry HUD
   if (telRadius && telShadow && telDilation) {
     const sinVal = Math.min(1.0, (3.0 * Math.sqrt(3.0) / 2.0) * (1.0 / camR) * Math.sqrt(Math.max(0.0, 1.0 - 1.0 / camR)));
     const angleRad = Math.asin(sinVal);
-    let shadowFrac;
     if (camR >= 1.5) {
       const cosVal = Math.cos(angleRad);
       shadowFrac = (1.0 - cosVal) * 0.5;
@@ -918,7 +920,10 @@ function animate() {
   }
 
   // Update dynamic audio redshift/distance modulation
-  cosmicAudio.update(camera.position.length());
+  const audioGamma = isKerrMetric
+    ? (camR >= 5.6 ? 1.0 + 61319.0 * Math.exp(-Math.pow((camR - 5.6) / 2.0, 2) * 0.6) : 61320.0 * Math.pow(4.6 / Math.max(0.05, camR - 1.0), 1.2))
+    : (1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR)));
+  cosmicAudio.update(camR, audioGamma, shadowFrac, camera.position, diskSpeedMultiplier);
 
   // Center bounding mesh around camera
   blackHoleMesh.position.copy(camera.position);
