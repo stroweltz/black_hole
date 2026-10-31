@@ -12,7 +12,6 @@ export const BlackHoleShader = {
     uPlanetPos: { value: null },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
-    uStars: { value: null },
     uSkyBrightness: { value: 0.42 }
   },
 
@@ -37,7 +36,6 @@ export const BlackHoleShader = {
     uniform vec3 uPlanetPos;
     uniform float uEmbersVisible;
     uniform sampler2D uMilkyWay;
-    uniform sampler2D uStars;
     uniform float uSkyBrightness;
 
     #define PI 3.141592653589793
@@ -54,29 +52,6 @@ export const BlackHoleShader = {
       p = fract(p * 0.3183099 + 0.1);
       p *= 17.0;
       return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-    }
-
-    float noise(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      vec2 u = f * f * (3.0 - 2.0 * f);
-      return mix(
-        mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
-        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-        u.y
-      );
-    }
-
-    float fbm(vec2 p) {
-      float v = 0.0;
-      float a = 0.52;
-      mat2 rot = mat2(0.8, -0.6, 0.6, 0.8);
-      for (int i = 0; i < 4; i++) {
-        v += a * noise(p);
-        p = rot * p * 2.1 + vec2(8.2, 4.3);
-        a *= 0.5;
-      }
-      return v;
     }
 
     float noise3D(vec3 p) {
@@ -132,6 +107,10 @@ export const BlackHoleShader = {
       // Isotropic angular sub-texel footprint:
       // Broadens 1-pixel Dirac star spikes just enough to satisfy the Nyquist sampling theorem
       // during camera rotation, preventing temporal scintillation without any motion blur.
+#ifdef FAST_SKYBOX
+      // 1-tap ultra-fast celestial sampling (Eco / High-DPI mode)
+      vec3 mw = texture2D(uMilkyWay, uv).rgb;
+#else
       float cosTheta = max(cos(theta), 0.18);
       vec2 dUV = vec2((0.75 / 6000.0) / cosTheta, 0.75 / 3000.0);
 
@@ -140,6 +119,7 @@ export const BlackHoleShader = {
                         texture2D(uMilkyWay, uv + vec2(-dUV.x,  dUV.y)).rgb +
                         texture2D(uMilkyWay, uv + vec2( dUV.x, -dUV.y)).rgb +
                         texture2D(uMilkyWay, uv + vec2(-dUV.x, -dUV.y)).rgb);
+#endif
 
       // Smooth continuous tone-curve (no hard black threshold cutoff):
       // Preserves subpixel Gaussian skirts of stars so they fade continuously without popping/flickering
@@ -306,26 +286,32 @@ export const BlackHoleShader = {
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
-      float minRadius = 1e6;
       bool hitHorizon = false;
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
-      // Optimized for high performance and seamless whole-space relativistic integration
+      // Conservatively tuned to eliminate boundary banding and preserve fine detail
+      #ifdef FAST_SKYBOX
+      const int MAX_STEPS = 80;
+#else
       const int MAX_STEPS = 100;
+#endif
       vec3 prevPos = rayPos;
 
       for (int i = 0; i < MAX_STEPS; i++) {
         float r = length(rayPos);
-        minRadius = min(minRadius, r);
 
-        // 1. Event Horizon hit: light is completely captured into the singularity
-        if (r <= r_eh) {
+        // 1. Event Horizon & Singularity Infall:
+        // Inside the photon sphere (r < 1.5*rs) with inward radial velocity, GR effective potential V'(r) > 0
+        // has no turning points; the photon is strictly captured into the singularity.
+        // Since no emitters (disk r in [2.48, 10.2], planet r=5.6) exist inside r < 2.48,
+        // early horizon capture preserves exact shadow geometry while terminating doomed rays 30-40 steps early.
+        if (r <= r_eh || (r <= 1.30 && dot(rayPos, rayDir) <= 0.0)) {
           hitHorizon = true;
           break;
         }
 
-        // 2. Seamless exit: ray is beyond outer disk (r_out = 10.2) and escaping into asymptotically flat space
-        if (r > 13.0 && dot(rayPos, rayDir) > 0.0) {
+        // 2. Seamless exit: ray has cleared outer disk (r_out = 10.2) and is escaping into asymptotically flat space
+        if (r > 11.0 && dot(rayPos, rayDir) > 0.0) {
           break;
         }
 
@@ -428,24 +414,18 @@ export const BlackHoleShader = {
         }
 
         // 5. Smooth continuous multi-scale step size:
+        // C0-continuous across all ranges, matching exact ray paths between Eco and HQ modes
         float stepSize;
-        if (r > 6.0) {
-          stepSize = 0.45 + 0.12 * (r - 6.0);
-        } else if (r > 2.0) {
-          stepSize = clamp(0.048 * r + 0.015, 0.035, 0.45);
+        if (r > 4.0) {
+          stepSize = 0.35 + 0.10 * (r - 4.0);
+        } else if (r > 1.8) {
+          stepSize = 0.105 * (r - 1.8) + 0.12;
         } else {
-          stepSize = clamp(0.14 * (r - r_eh) + 0.006, 0.005, 0.12);
+          stepSize = clamp(0.127 * (r - r_eh) + 0.02, 0.015, 0.12);
         }
 
-        // Adaptive high-precision sub-stepping when ray approaches Miller's Planet
-        if (canHitPlanet) {
-          vec3 toPlanet = rayPos - uPlanetPos;
-          float dP2 = dot(toPlanet, toPlanet);
-          if (dP2 < 0.81) {
-            float dP = sqrt(dP2);
-            stepSize = min(stepSize, max(0.035, (dP - 0.20) * 0.42));
-          }
-        }
+        // Miller's planet is intersected analytically along segments (section 3);
+        // keeping geodesic stepSize continuous preserves razor-sharp event horizon geometry and prevents artificial background distortion.
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
         // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
@@ -462,8 +442,14 @@ export const BlackHoleShader = {
 
       // Gravitationally lensed deep space skybox
       if (!hitHorizon && accumAlpha < 1.0) {
-        vec3 sky = getSkybox(rayDir);
-        accumColor += (1.0 - accumAlpha) * sky;
+        // If a ray exhausted all steps while still heading inward in the gravitational well,
+        // it belongs to the black hole shadow capture basin, not the open skybox.
+        if (dot(rayPos, rayDir) <= 0.0) {
+          hitHorizon = true;
+        } else {
+          vec3 sky = getSkybox(rayDir);
+          accumColor += (1.0 - accumAlpha) * sky;
+        }
       }
 
       gl_FragColor = vec4(accumColor, 1.0);

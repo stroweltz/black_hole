@@ -71,6 +71,10 @@
               <span class="telemetry-label">ДИЛАТАЦИЯ ВРЕМЕНИ</span>
               <span id="tel-dilation" class="telemetry-value">× 1.0 <span class="unit">(1ч ≈ 1ч)</span></span>
             </div>
+            <div class="telemetry-item" id="tel-perf-item">
+              <span class="telemetry-label">FPS / GPU</span>
+              <span id="tel-fps" class="telemetry-value">-- <span class="unit">FPS</span></span>
+            </div>
           </div>
         </div>
 
@@ -149,7 +153,8 @@
       </button>
       <input type="file" id="input-bg-file" accept=".tif,.tiff,.jpg,.jpeg,.png,.webp,.avif,.bmp,image/*" style="display: none;">
 
-      <div class="divider"></div>
+      <div class="divider desktop-divider-hide"></div>
+      <div class="controls-break"></div>
 
       <div class="slider-group">
         <label for="slider-speed">Скорость:</label>
@@ -158,6 +163,10 @@
       </div>
 
       <div class="divider"></div>
+
+      <button id="btn-hq-toggle" class="btn btn-util" title="Качество рендера: Эко (высокий FPS) ↔ Макс. качество (HQ) [Горячая клавиша: E]">
+        <span id="hq-icon">⚡</span> <span id="hq-label">Качество: Эко</span>
+      </button>
 
       <button id="btn-audio" class="btn btn-util" title="Атмосферный космический звук">
         <span class="icon">🔇</span> Звук космоса

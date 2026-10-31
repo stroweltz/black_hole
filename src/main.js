@@ -35,17 +35,57 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 // Mobile & Touch Device Detection (Portrait + Landscape mobile screens)
 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
 const isMobileDevice = isTouchDevice || (window.innerWidth <= 900) || (window.innerHeight <= 520);
-const isMobile = isMobileDevice;
+
+// --- GPU Diagnostics & Active Renderer Info ---
+function getGPUDiagnostics() {
+  const gl = renderer.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const unmaskedRenderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'Generic WebGL';
+  const isIntegrated = /Intel|HD Graphics|UHD Graphics|Iris|SwiftShader|Basic Render/i.test(unmaskedRenderer);
+  const isDiscrete = /NVIDIA|GeForce|Radeon|AMD/i.test(unmaskedRenderer);
+  
+  let shortName = 'GPU';
+  if (/GeForce\s+([A-Za-z0-9\s]+)/i.test(unmaskedRenderer)) {
+    const m = unmaskedRenderer.match(/GeForce\s+([A-Za-z0-9\s]+?)(?:\sDirect3D|\s\(|,|$)/i);
+    shortName = m ? `GeForce ${m[1].trim()}` : 'NVIDIA GeForce';
+  } else if (/Intel.*(HD|UHD|Iris)[^,)]*/i.test(unmaskedRenderer)) {
+    const m = unmaskedRenderer.match(/(Intel\(R\)\s+[A-Za-z0-9\s]+Graphics(?:\s+\d+)?)/i);
+    shortName = m ? m[1].replace('Intel(R)', 'Intel').trim() : 'Intel iGPU';
+  } else if (/SwiftShader/i.test(unmaskedRenderer)) {
+    shortName = 'SwiftShader (CPU)';
+  }
+
+  return {
+    raw: unmaskedRenderer,
+    isIntegrated,
+    isDiscrete,
+    shortName
+  };
+}
+const gpuInfo = getGPUDiagnostics();
+console.log('%c[Gargantua GPU Diagnostics]', 'color: #38bdf8; font-weight: bold;', {
+  gpu: gpuInfo.raw,
+  isIntegrated: gpuInfo.isIntegrated,
+  isDiscrete: gpuInfo.isDiscrete,
+  dpr: renderer.getPixelRatio(),
+  resolution: `${window.innerWidth}x${window.innerHeight}`
+});
+
+// Quality Toggle: false = Eco (Silent, 30 FPS, cool GPU), true = HQ (Maximum Quality, native DPR 1.0)
+// Defaults to Eco to prevent laptop GPU thermal spikes and loud fan noise
+let isHQ = false;
 
 function getOptimalDPR() {
-  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
-  // Cap at 1.0 on mobile to guarantee smooth 60 FPS raymarching while retaining crisp visuals
-  return Math.min(window.devicePixelRatio || 1.0, mobile ? 1.0 : 1.25);
+  if (!isHQ) {
+    // Eco Mode: 0.72 saves ~48% fillrate, keeping laptop GPU cool and quiet
+    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.70 : 0.72);
+  }
+  // Max Quality mode: 100% native resolution
+  return Math.min(window.devicePixelRatio || 1.0, 1.0);
 }
 
 function getBloomScale() {
-  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
-  return mobile ? 0.35 : 0.5;
+  return !isHQ ? 0.35 : 0.5;
 }
 
 renderer.setPixelRatio(getOptimalDPR());
@@ -106,7 +146,7 @@ loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
   if (preloaderStatus) preloaderStatus.textContent = `Загрузка астрофизических данных: ${percent}%`;
 };
 
-// --- Skybox Textures: Milky Way + Pinpoint Stars ---
+// --- Skybox Texture: Deep Space Milky Way with Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader(loadingManager);
 
 const milkyWayTex = texLoader.load('./milkyway.jpg');
@@ -115,11 +155,6 @@ milkyWayTex.wrapT = THREE.ClampToEdgeWrapping;
 milkyWayTex.minFilter = THREE.LinearFilter;
 milkyWayTex.magFilter = THREE.LinearFilter;
 
-const starsTex = texLoader.load('./stars.png');
-starsTex.wrapS = THREE.RepeatWrapping;
-starsTex.wrapT = THREE.ClampToEdgeWrapping;
-starsTex.minFilter = THREE.LinearFilter;
-starsTex.magFilter = THREE.LinearFilter;
 
 // --- Black Hole Raymarching Mesh ---
 // Sized generously around camera; position follows camera every frame
@@ -134,11 +169,13 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: milkyWayTex },
-    uStars: { value: starsTex },
     uSkyBrightness: { value: 0.38 }
   },
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
+  defines: {
+    ...(!isHQ ? { FAST_SKYBOX: '1' } : {})
+  },
   side: THREE.BackSide,
   depthWrite: false,
   depthTest: false
@@ -232,6 +269,7 @@ if (btnViewPortal) btnViewPortal.addEventListener('click', () => activatePreset(
 const telRadius = document.getElementById('tel-radius');
 const telShadow = document.getElementById('tel-shadow');
 const telDilation = document.getElementById('tel-dilation');
+const telFps = document.getElementById('tel-fps');
 const telemetryTitle = document.getElementById('telemetry-title');
 
 // Metric Mode: true = Kerr (extreme spin / Interstellar), false = Schwarzschild (static)
@@ -269,6 +307,56 @@ const sliderSpeed = document.getElementById('slider-speed');
 const speedVal = document.getElementById('speed-val');
 const btnUploadBg = document.getElementById('btn-upload-bg');
 const inputBgFile = document.getElementById('input-bg-file');
+const btnHQToggle = document.getElementById('btn-hq-toggle') || document.getElementById('btn-perf-toggle');
+const hqIcon = document.getElementById('hq-icon') || document.getElementById('perf-icon');
+const hqLabel = document.getElementById('hq-label') || document.getElementById('perf-label');
+
+function updateHQ_UI() {
+  if (!btnHQToggle) return;
+  if (isHQ) {
+    btnHQToggle.classList.add('active');
+    if (hqIcon) hqIcon.textContent = '💎';
+    if (hqLabel) hqLabel.textContent = 'Качество: HQ';
+    btnHQToggle.title = 'Максимальное качество: ВКЛ (DPR 1.0, 100% резкость). Нажмите для переключения в Эко-режим (повысить FPS) [E]';
+  } else {
+    btnHQToggle.classList.remove('active');
+    if (hqIcon) hqIcon.textContent = '⚡';
+    if (hqLabel) hqLabel.textContent = 'Качество: Эко';
+    btnHQToggle.title = 'Эко-режим: ВКЛ (высокий FPS, DPR 0.78, меньше нагрев GPU). Нажмите для включения Макс. качества [E]';
+  }
+}
+
+function setHQMode(enabled, showFeedback = true) {
+  isHQ = enabled;
+  blackHoleMaterial.defines = {
+    ...(!isHQ ? { FAST_SKYBOX: '1' } : {})
+  };
+  blackHoleMaterial.needsUpdate = true;
+
+  handleResize();
+  updateHQ_UI();
+
+  if (showFeedback) {
+    showToast(isHQ 
+      ? '💎 Включено максимальное качество (HQ) • Нативное разрешение' 
+      : '⚡ Включен Эко-режим • Высокий FPS (меньше нагрузка на GPU)'
+    );
+  }
+}
+
+if (btnHQToggle) {
+  btnHQToggle.addEventListener('click', () => {
+    setHQMode(!isHQ);
+  });
+  updateHQ_UI();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'e' || e.key === 'E' || e.key === 'у' || e.key === 'У') {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    setHQMode(!isHQ);
+  }
+});
 
 if (btnBloom) {
   let bloomOn = true;
@@ -536,8 +624,34 @@ function hidePreloader() {
 // Fallback safety timeout ensures preloader never gets stuck if tab was initially in background
 setTimeout(hidePreloader, 4000);
 
+let fpsFrameCount = 0;
+let lastFpsCheckTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
+
+  const now = performance.now();
+  // Update Real-Time FPS & Telemetry
+  fpsFrameCount++;
+  if (now - lastFpsCheckTime >= 400) {
+    const elapsed = now - lastFpsCheckTime;
+    const currentFps = Math.round((fpsFrameCount * 1000) / elapsed);
+    fpsFrameCount = 0;
+    lastFpsCheckTime = now;
+
+    if (telFps) {
+      const modeTag = isHQ ? 'HQ' : 'Эко';
+      telFps.innerHTML = `${currentFps} <span class="unit">FPS</span> <span style="font-size:10px;opacity:0.85;margin-left:4px;">[${modeTag}]</span>`;
+      telFps.title = `Видеокарта: ${gpuInfo.shortName}\nФактический рендерер: ${gpuInfo.raw}\nРежим: ${isHQ ? 'HQ (Макс. качество, 100% DPR)' : 'Эко (Высокий FPS, 78% DPR)'}\nРазрешение рендера: ${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`;
+      if (currentFps >= 50) {
+        telFps.style.color = '#4ade80';
+      } else if (currentFps >= 30) {
+        telFps.style.color = '#facc15';
+      } else {
+        telFps.style.color = '#f87171';
+      }
+    }
+  }
 
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();

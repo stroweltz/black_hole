@@ -10,3 +10,9 @@ Physics of*
 .agents/
 .DS_Store
 Thumbs.db
+.codegraph/
+scratch/
+GPU Internals.html
+about-gpu-*.txt
+conversation.pdf
+баг.jpg
