@@ -464,13 +464,16 @@ export class CosmicAudio {
     let r, gamma, shadowFrac, camPos, diskSpeed;
     if (typeof arg1 === 'number') {
       r = Math.max(arg1, 1.0005);
-      gamma = typeof arg2 === 'number' ? arg2 : (1 / Math.sqrt(Math.max(1 - 1 / r, 0.0005)));
+      // Pure physical Schwarzschild acoustic potential: smooth, continuous, zero abrupt jumps
+      const physicalGamma = 1.0 / Math.sqrt(Math.max(0.0005, 1.0 - 1.0 / r));
+      gamma = (typeof arg2 === 'number' && arg2 <= physicalGamma * 1.5) ? arg2 : physicalGamma;
       shadowFrac = typeof arg3 === 'number' ? arg3 : 0.0;
       camPos = (arg4 && typeof arg4 === 'object') ? arg4 : null;
       diskSpeed = typeof arg5 === 'number' ? arg5 : 1.0;
     } else if (arg1 && typeof arg1 === 'object') {
       r = Math.max(arg1.r || 15.0, 1.0005);
-      gamma = arg1.gamma || (1 / Math.sqrt(Math.max(1 - 1 / r, 0.0005)));
+      const physicalGamma = 1.0 / Math.sqrt(Math.max(0.0005, 1.0 - 1.0 / r));
+      gamma = (typeof arg1.gamma === 'number' && arg1.gamma <= physicalGamma * 1.5) ? arg1.gamma : physicalGamma;
       shadowFrac = arg1.shadowFrac || 0.0;
       camPos = arg1.camPos || null;
       diskSpeed = arg1.diskSpeed !== undefined ? arg1.diskSpeed : 1.0;

@@ -920,9 +920,8 @@ function animate() {
   }
 
   // Update dynamic audio redshift/distance modulation
-  const audioGamma = isKerrMetric
-    ? (camR >= 5.6 ? 1.0 + 61319.0 * Math.exp(-Math.pow((camR - 5.6) / 2.0, 2) * 0.6) : 61320.0 * Math.pow(4.6 / Math.max(0.05, camR - 1.0), 1.2))
-    : (1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR)));
+  // Pure physical Schwarzschild gamma dilation for acoustic warping (independent of cinematic HUD metric)
+  const audioGamma = 1.0 / Math.sqrt(Math.max(0.0005, 1.0 - 1.0 / camR));
   cosmicAudio.update(camR, audioGamma, shadowFrac, camera.position, diskSpeedMultiplier);
 
   // Center bounding mesh around camera
