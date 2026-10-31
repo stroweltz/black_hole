@@ -132,6 +132,10 @@ export const BlackHoleShader = {
       // Isotropic angular sub-texel footprint:
       // Broadens 1-pixel Dirac star spikes just enough to satisfy the Nyquist sampling theorem
       // during camera rotation, preventing temporal scintillation without any motion blur.
+#ifdef FAST_SKYBOX
+      // 1-tap ultra-fast celestial sampling (Eco / High-DPI mode)
+      vec3 mw = texture2D(uMilkyWay, uv).rgb;
+#else
       float cosTheta = max(cos(theta), 0.18);
       vec2 dUV = vec2((0.75 / 6000.0) / cosTheta, 0.75 / 3000.0);
 
@@ -140,6 +144,7 @@ export const BlackHoleShader = {
                         texture2D(uMilkyWay, uv + vec2(-dUV.x,  dUV.y)).rgb +
                         texture2D(uMilkyWay, uv + vec2( dUV.x, -dUV.y)).rgb +
                         texture2D(uMilkyWay, uv + vec2(-dUV.x, -dUV.y)).rgb);
+#endif
 
       // Smooth continuous tone-curve (no hard black threshold cutoff):
       // Preserves subpixel Gaussian skirts of stars so they fade continuously without popping/flickering
@@ -304,6 +309,13 @@ export const BlackHoleShader = {
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
 
+      // Conserved Relativistic Angular Momentum Invariant h = r x v
+      // In Schwarzschild metric, angular momentum is strictly conserved along every geodesic!
+      // Calculating orbital plane distance once before the loop saves ~100 cross/dot/sqrt operations per pixel.
+      vec3 initH = cross(rayPos, rayDir);
+      float initH2 = dot(initH, initH);
+      bool canHitPlanet = (uPlanetVisible > 0.5) && (abs(dot(uPlanetPos, initH)) / max(sqrt(initH2), 1e-4) < 0.55);
+
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
       float minRadius = 1e6;
@@ -329,47 +341,44 @@ export const BlackHoleShader = {
           break;
         }
 
-        // 3. Planet pre-cull & segment hit detection
-        vec3 seg = rayPos - prevPos;
-        float segLen = length(seg);
-        vec3 segDir = (segLen > 1e-5) ? (seg / segLen) : rayDir;
-
+        // 3. Planet pre-cull & segment hit detection (deferred length calculations)
         bool hitPlanetThisStep = false;
         float tHitPlanet = 1e6;
         vec3 pHitPos = vec3(0.0);
         vec3 pNorm = vec3(0.0, 1.0, 0.0);
-        vec3 pViewDir = segDir;
+        vec3 pViewDir = rayDir;
+        float segLen = 0.0;
 
-        // Geodesic orbital plane invariant pre-cull
-        vec3 currH = cross(rayPos, rayDir);
-        float currH2 = dot(currH, currH);
-        bool canHitPlanet = (uPlanetVisible > 0.5) && (abs(dot(uPlanetPos, currH)) / max(sqrt(currH2), 1e-4) < 0.55);
-
-        if (canHitPlanet && i > 0 && segLen > 1e-5) {
-          if (abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
-            vec3 toP = prevPos - uPlanetPos;
-            float toP2 = dot(toP, toP);
-            float pRad = 0.22;
-            float boundR = segLen + pRad + 0.35;
-            if (toP2 < boundR * boundR) {
-              float b = dot(toP, segDir);
-              float c = toP2 - pRad * pRad;
-              float discr = b * b - c;
-              if (discr >= 0.0) {
-                float sqrtD = sqrt(discr);
-                float t1 = -b - sqrtD;
-                if (c < 0.0) {
-                  tHitPlanet = 0.0;
-                  hitPlanetThisStep = true;
-                  pHitPos = prevPos;
-                  pNorm = normalize(pHitPos - uPlanetPos);
-                  pViewDir = segDir;
-                } else if (t1 >= 0.0 && t1 <= segLen) {
-                  tHitPlanet = t1;
-                  hitPlanetThisStep = true;
-                  pHitPos = prevPos + segDir * t1;
-                  pNorm = normalize(pHitPos - uPlanetPos);
-                  pViewDir = segDir;
+        if (canHitPlanet && i > 0 && abs(r - 5.6) < 1.6 && abs(prevPos.y - uPlanetPos.y) < 1.2) {
+          vec3 toP = prevPos - uPlanetPos;
+          float toP2 = dot(toP, toP);
+          if (toP2 < 2.0) {
+            vec3 seg = rayPos - prevPos;
+            segLen = length(seg);
+            if (segLen > 1e-5) {
+              vec3 segDir = seg / segLen;
+              float pRad = 0.22;
+              float boundR = segLen + pRad + 0.35;
+              if (toP2 < boundR * boundR) {
+                float b = dot(toP, segDir);
+                float c = toP2 - pRad * pRad;
+                float discr = b * b - c;
+                if (discr >= 0.0) {
+                  float sqrtD = sqrt(discr);
+                  float t1 = -b - sqrtD;
+                  if (c < 0.0) {
+                    tHitPlanet = 0.0;
+                    hitPlanetThisStep = true;
+                    pHitPos = prevPos;
+                    pNorm = normalize(pHitPos - uPlanetPos);
+                    pViewDir = segDir;
+                  } else if (t1 >= 0.0 && t1 <= segLen) {
+                    tHitPlanet = t1;
+                    hitPlanetThisStep = true;
+                    pHitPos = prevPos + segDir * t1;
+                    pNorm = normalize(pHitPos - uPlanetPos);
+                    pViewDir = segDir;
+                  }
                 }
               }
             }
@@ -388,6 +397,7 @@ export const BlackHoleShader = {
           if (hitR2 >= 6.15 && hitR2 <= 104.04) {
             hitDiskThisStep = true;
             if (hitPlanetThisStep) {
+              if (segLen <= 0.0) segLen = length(rayPos - prevPos);
               tHitDisk = uCross * segLen;
             }
           }
@@ -449,11 +459,12 @@ export const BlackHoleShader = {
 
         // Symplectic 2nd-Order Leapfrog Geodesic step
         // dV/dlambda = - 1.5 * rs * (h^2 / r^5) * pos
+        // Evaluates 1/r^5 using fast algebraic multiplication, bypassing expensive SFU pow()
         vec3 halfPos = rayPos + rayDir * (stepSize * 0.5);
         float halfR = length(halfPos);
-        vec3 hVec = cross(halfPos, rayDir);
-        float h2 = dot(hVec, hVec);
-        vec3 accel = - 1.5 * rs * (h2 / (pow(halfR, 5.0) + 1e-5)) * halfPos;
+        float invHalfR = 1.0 / max(halfR, 1e-4);
+        float inv5 = invHalfR * invHalfR * invHalfR * invHalfR * invHalfR;
+        vec3 accel = - 1.5 * rs * (initH2 * inv5) * halfPos;
 
         rayDir = normalize(rayDir + accel * stepSize);
         prevPos = rayPos;

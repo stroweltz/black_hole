@@ -37,15 +37,21 @@ const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 
 const isMobileDevice = isTouchDevice || (window.innerWidth <= 900) || (window.innerHeight <= 520);
 const isMobile = isMobileDevice;
 
+// Performance Mode: defaults to true on mobile/touch, configurable on desktop
+let isPerformanceMode = isMobileDevice;
+
 function getOptimalDPR() {
-  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
-  // Cap at 1.0 on mobile to guarantee smooth 60 FPS raymarching while retaining crisp visuals
-  return Math.min(window.devicePixelRatio || 1.0, mobile ? 1.0 : 1.25);
+  if (isPerformanceMode) {
+    // Mobile DPR: 0.75 saves ~44% fillrate while staying razor-sharp at 320+ PPI
+    // Desktop Eco DPR: 0.85 saves ~28% fillrate for smooth 60 FPS
+    return Math.min(window.devicePixelRatio || 1.0, isMobileDevice ? 0.75 : 0.85);
+  }
+  // Max Quality mode: cap at 1.0 to prevent 4K/5K fillrate bottlenecks while keeping 100% native pixels
+  return Math.min(window.devicePixelRatio || 1.0, 1.0);
 }
 
 function getBloomScale() {
-  const mobile = ('ontouchstart' in window) || (window.innerWidth <= 900) || (window.innerHeight <= 520);
-  return mobile ? 0.35 : 0.5;
+  return isPerformanceMode ? 0.35 : 0.5;
 }
 
 renderer.setPixelRatio(getOptimalDPR());
@@ -139,6 +145,9 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
   },
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
+  defines: {
+    ...(isPerformanceMode ? { FAST_SKYBOX: '1' } : {})
+  },
   side: THREE.BackSide,
   depthWrite: false,
   depthTest: false
@@ -269,6 +278,53 @@ const sliderSpeed = document.getElementById('slider-speed');
 const speedVal = document.getElementById('speed-val');
 const btnUploadBg = document.getElementById('btn-upload-bg');
 const inputBgFile = document.getElementById('input-bg-file');
+const btnPerfToggle = document.getElementById('btn-perf-toggle');
+const perfIcon = document.getElementById('perf-icon');
+const perfLabel = document.getElementById('perf-label');
+
+function updatePerfUI() {
+  if (!btnPerfToggle) return;
+  if (isPerformanceMode) {
+    btnPerfToggle.classList.add('active');
+    if (perfIcon) perfIcon.textContent = '⚡';
+    if (perfLabel) perfLabel.textContent = '60 FPS (Эко)';
+    btnPerfToggle.title = 'Режим: Эко (60 FPS). Нажмите для переключения на Максимальное качество [Горячая клавиша: E]';
+  } else {
+    btnPerfToggle.classList.remove('active');
+    if (perfIcon) perfIcon.textContent = '💎';
+    if (perfLabel) perfLabel.textContent = 'Качество (HQ)';
+    btnPerfToggle.title = 'Режим: Макс. качество. Нажмите для включения 60 FPS (Эко) [Горячая клавиша: E]';
+  }
+}
+
+function setPerformanceMode(enabled, showFeedback = true) {
+  isPerformanceMode = enabled;
+  blackHoleMaterial.defines = {
+    ...(isPerformanceMode ? { FAST_SKYBOX: '1' } : {})
+  };
+  blackHoleMaterial.needsUpdate = true;
+
+  handleResize();
+  updatePerfUI();
+
+  if (showFeedback) {
+    showToast(isPerformanceMode ? '⚡ Включен режим 60 FPS (Эко)' : '💎 Включен режим максимального качества (HQ)');
+  }
+}
+
+if (btnPerfToggle) {
+  btnPerfToggle.addEventListener('click', () => {
+    setPerformanceMode(!isPerformanceMode);
+  });
+  updatePerfUI();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'e' || e.key === 'E' || e.key === 'у' || e.key === 'У') {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    setPerformanceMode(!isPerformanceMode);
+  }
+});
 
 if (btnBloom) {
   let bloomOn = true;
