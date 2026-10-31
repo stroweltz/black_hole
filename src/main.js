@@ -316,13 +316,13 @@ function updateHQ_UI() {
   if (isHQ) {
     btnHQToggle.classList.add('active');
     if (hqIcon) hqIcon.textContent = '💎';
-    if (hqLabel) hqLabel.textContent = 'HQ Качество';
-    btnHQToggle.title = 'Максимальное качество включено (DPR 1.0, без ограничения FPS). Нажмите для перехода в тихий Эко-режим [E]';
+    if (hqLabel) hqLabel.textContent = 'Качество: HQ';
+    btnHQToggle.title = 'Максимальное качество: ВКЛ (DPR 1.0, 100% резкость). Нажмите для переключения в Эко-режим (повысить FPS) [E]';
   } else {
     btnHQToggle.classList.remove('active');
-    if (hqIcon) hqIcon.textContent = '🍃';
-    if (hqLabel) hqLabel.textContent = 'Эко (тихий)';
-    btnHQToggle.title = 'Тихий Эко-режим (30 FPS, холодный GPU). Нажмите для включения Макс. качества [E]';
+    if (hqIcon) hqIcon.textContent = '⚡';
+    if (hqLabel) hqLabel.textContent = 'Качество: Эко';
+    btnHQToggle.title = 'Эко-режим: ВКЛ (высокий FPS, DPR 0.78, меньше нагрев GPU). Нажмите для включения Макс. качества [E]';
   }
 }
 
@@ -339,7 +339,7 @@ function setHQMode(enabled, showFeedback = true) {
   if (showFeedback) {
     showToast(isHQ 
       ? '💎 Включено максимальное качество (HQ) • Нативное разрешение' 
-      : '🍃 Включен тихий Эко-режим • 30 FPS (холодный GPU, кулеры тише)'
+      : '⚡ Включен Эко-режим • Высокий FPS (меньше нагрузка на GPU)'
     );
   }
 }
@@ -627,21 +627,8 @@ setTimeout(hidePreloader, 4000);
 let fpsFrameCount = 0;
 let lastFpsCheckTime = performance.now();
 
-// --- Frame Throttling for Silent Eco Mode (30 FPS) ---
-const ECO_FRAME_MIN_MS = 1000 / 30.0; // ~33.33ms
-let lastRenderTime = performance.now();
-
 function animate() {
   requestAnimationFrame(animate);
-
-  const now = performance.now();
-  if (!isHQ) {
-    const elapsedSinceLastRender = now - lastRenderTime;
-    if (elapsedSinceLastRender < ECO_FRAME_MIN_MS - 1.5) {
-      return; // Skip frame: lets the GPU cores rest and cool down!
-    }
-  }
-  lastRenderTime = now;
 
   // Update Real-Time FPS & Telemetry
   fpsFrameCount++;
@@ -652,17 +639,15 @@ function animate() {
     lastFpsCheckTime = now;
 
     if (telFps) {
-      const modeTag = isHQ ? 'HQ' : 'Эко 30';
+      const modeTag = isHQ ? 'HQ' : 'Эко';
       telFps.innerHTML = `${currentFps} <span class="unit">FPS</span> <span style="font-size:10px;opacity:0.85;margin-left:4px;">[${modeTag}]</span>`;
-      telFps.title = `Видеокарта: ${gpuInfo.shortName}\nФактический рендерер: ${gpuInfo.raw}\nРежим: ${isHQ ? 'HQ (Макс. качество, 100% DPR)' : 'Эко (тихий, 30 FPS, 78% DPR)'}\nРазрешение рендера: ${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`;
-      if (isHQ) {
-        if (currentFps >= 50) telFps.style.color = '#4ade80';
-        else if (currentFps >= 25) telFps.style.color = '#facc15';
-        else telFps.style.color = '#f87171';
+      telFps.title = `Видеокарта: ${gpuInfo.shortName}\nФактический рендерер: ${gpuInfo.raw}\nРежим: ${isHQ ? 'HQ (Макс. качество, 100% DPR)' : 'Эко (Высокий FPS, 78% DPR)'}\nРазрешение рендера: ${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`;
+      if (currentFps >= 50) {
+        telFps.style.color = '#4ade80';
+      } else if (currentFps >= 30) {
+        telFps.style.color = '#facc15';
       } else {
-        if (currentFps >= 27) telFps.style.color = '#4ade80';
-        else if (currentFps >= 20) telFps.style.color = '#facc15';
-        else telFps.style.color = '#f87171';
+        telFps.style.color = '#f87171';
       }
     }
   }
