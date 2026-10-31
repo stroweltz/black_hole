@@ -19,7 +19,6 @@ export class CosmicAudio {
     this.noiseGain = null;
     this.filter = null;
     this.shimmerOsc = null;
-    this.baseFilterFreq = 160;
   }
 
   init() {

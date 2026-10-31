@@ -12,7 +12,6 @@ export const BlackHoleShader = {
     uPlanetPos: { value: null },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
-    uStars: { value: null },
     uSkyBrightness: { value: 0.42 }
   },
 
@@ -37,7 +36,6 @@ export const BlackHoleShader = {
     uniform vec3 uPlanetPos;
     uniform float uEmbersVisible;
     uniform sampler2D uMilkyWay;
-    uniform sampler2D uStars;
     uniform float uSkyBrightness;
 
     #define PI 3.141592653589793
@@ -54,29 +52,6 @@ export const BlackHoleShader = {
       p = fract(p * 0.3183099 + 0.1);
       p *= 17.0;
       return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-    }
-
-    float noise(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      vec2 u = f * f * (3.0 - 2.0 * f);
-      return mix(
-        mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
-        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-        u.y
-      );
-    }
-
-    float fbm(vec2 p) {
-      float v = 0.0;
-      float a = 0.52;
-      mat2 rot = mat2(0.8, -0.6, 0.6, 0.8);
-      for (int i = 0; i < 4; i++) {
-        v += a * noise(p);
-        p = rot * p * 2.1 + vec2(8.2, 4.3);
-        a *= 0.5;
-      }
-      return v;
     }
 
     float noise3D(vec3 p) {
@@ -311,7 +286,6 @@ export const BlackHoleShader = {
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
-      float minRadius = 1e6;
       bool hitHorizon = false;
 
       // Leapfrog Geodesic Integrator with Multi-Scale Adaptive Stepping
@@ -321,7 +295,6 @@ export const BlackHoleShader = {
 
       for (int i = 0; i < MAX_STEPS; i++) {
         float r = length(rayPos);
-        minRadius = min(minRadius, r);
 
         // 1. Event Horizon hit: light is completely captured into the singularity
         if (r <= r_eh) {

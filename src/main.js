@@ -35,7 +35,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 // Mobile & Touch Device Detection (Portrait + Landscape mobile screens)
 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
 const isMobileDevice = isTouchDevice || (window.innerWidth <= 900) || (window.innerHeight <= 520);
-const isMobile = isMobileDevice;
 
 // --- GPU Diagnostics & Active Renderer Info ---
 function getGPUDiagnostics() {
@@ -146,7 +145,7 @@ loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
   if (preloaderStatus) preloaderStatus.textContent = `Загрузка астрофизических данных: ${percent}%`;
 };
 
-// --- Skybox Textures: Milky Way + Pinpoint Stars ---
+// --- Skybox Texture: Deep Space Milky Way with Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader(loadingManager);
 
 const milkyWayTex = texLoader.load('./milkyway.jpg');
@@ -155,11 +154,6 @@ milkyWayTex.wrapT = THREE.ClampToEdgeWrapping;
 milkyWayTex.minFilter = THREE.LinearFilter;
 milkyWayTex.magFilter = THREE.LinearFilter;
 
-const starsTex = texLoader.load('./stars.png');
-starsTex.wrapS = THREE.RepeatWrapping;
-starsTex.wrapT = THREE.ClampToEdgeWrapping;
-starsTex.minFilter = THREE.LinearFilter;
-starsTex.magFilter = THREE.LinearFilter;
 
 // --- Black Hole Raymarching Mesh ---
 // Sized generously around camera; position follows camera every frame
@@ -174,7 +168,6 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: milkyWayTex },
-    uStars: { value: starsTex },
     uSkyBrightness: { value: 0.38 }
   },
   vertexShader: BlackHoleShader.vertexShader,
@@ -639,7 +632,6 @@ function animate() {
   if (now - lastFpsCheckTime >= 400) {
     const elapsed = now - lastFpsCheckTime;
     const currentFps = Math.round((fpsFrameCount * 1000) / elapsed);
-    const frameMs = (elapsed / fpsFrameCount).toFixed(1);
     fpsFrameCount = 0;
     lastFpsCheckTime = now;
 
