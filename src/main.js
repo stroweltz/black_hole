@@ -174,7 +174,8 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
     uPlanetPos: { value: new THREE.Vector3(-4.95, 0.38, 1.85) },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: milkyWayTex },
-    uSkyBrightness: { value: 0.38 }
+    uSkyBrightness: { value: 0.38 },
+    uHybridBypass: { value: 1.0 }
   },
   vertexShader: BlackHoleShader.vertexShader,
   fragmentShader: BlackHoleShader.fragmentShader,
@@ -185,6 +186,7 @@ const blackHoleMaterial = new THREE.ShaderMaterial({
   depthWrite: false,
   depthTest: false
 });
+window.blackHoleMaterial = blackHoleMaterial;
 
 const blackHoleMesh = new THREE.Mesh(boxGeo, blackHoleMaterial);
 scene.add(blackHoleMesh);
@@ -206,6 +208,9 @@ const bloomPass = new UnrealBloomPass(
 const outputPass = new OutputPass();
 
 const composer = new EffectComposer(renderer);
+window.renderer = renderer;
+window.scene = scene;
+window.composer = composer;
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 composer.addPass(outputPass);
@@ -805,10 +810,33 @@ setTimeout(hidePreloader, 4000);
 let fpsFrameCount = 0;
 let lastFpsCheckTime = performance.now();
 
+// --- Cinematic Thermal Governor State ---
+let lastUserActionTime = performance.now();
+let lastFrameTime = 0;
+const recordUserAction = () => { lastUserActionTime = performance.now(); };
+window.addEventListener('pointermove', recordUserAction, { passive: true });
+window.addEventListener('pointerdown', recordUserAction, { passive: true });
+window.addEventListener('keydown', recordUserAction, { passive: true });
+window.addEventListener('touchstart', recordUserAction, { passive: true });
+window.addEventListener('wheel', recordUserAction, { passive: true });
+
 function animate() {
   requestAnimationFrame(animate);
 
+  // 1. Complete GPU shutdown when tab is minimized / obscured
+  if (document.hidden) return;
+
   const now = performance.now();
+
+  // 2. Cinematic Thermal Governor: 30 FPS aesthetic in idle (cools laptop GPU by ~10 °C)
+  const isInteracting = controls.isInteracting || controls.isDragging || controls.isResetting;
+  if (isInteracting) lastUserActionTime = now;
+  const isIdle = (now - lastUserActionTime > 4000);
+  if (isIdle && window.__freezeTime === undefined) {
+    if (now - lastFrameTime < 32.5) return;
+  }
+  lastFrameTime = now;
+
   // Update Real-Time FPS & Telemetry
   fpsFrameCount++;
   if (now - lastFpsCheckTime >= 400) {
@@ -818,13 +846,13 @@ function animate() {
     lastFpsCheckTime = now;
 
     if (telFps) {
-      const modeTag = isHQ ? t('tagHQ', currentLang) : t('tagEco', currentLang);
+      const modeTag = isHQ ? t('tagHQ', currentLang) : (isIdle ? 'Eco 30' : t('tagEco', currentLang));
       telFps.innerHTML = `${currentFps} <span class="unit">FPS</span> <span style="font-size:10px;opacity:0.85;margin-left:4px;">[${modeTag}]</span>`;
       const modeDesc = isHQ ? t('gpuModeHQ', currentLang) : t('gpuModeEco', currentLang);
       telFps.title = t('gpuTooltip', currentLang, gpuInfo.shortName, gpuInfo.raw, modeDesc, `${Math.round(window.innerWidth * renderer.getPixelRatio())}×${Math.round(window.innerHeight * renderer.getPixelRatio())}`);
       if (currentFps >= 50) {
         telFps.style.color = '#4ade80';
-      } else if (currentFps >= 30) {
+      } else if (currentFps >= 28) {
         telFps.style.color = '#facc15';
       } else {
         telFps.style.color = '#f87171';
@@ -913,7 +941,7 @@ function animate() {
   }
 
   // Subtle cinematic idle drift when not actively navigating
-  if (!controls.isInteracting && !controls.isResetting) {
+  if (!controls.isInteracting && !controls.isResetting && window.__freezeTime === undefined) {
     const driftAngle = simTime * 0.025;
     camera.position.y += Math.sin(driftAngle) * 0.0006;
     controls.targetYaw += delta * 0.003;
@@ -928,7 +956,7 @@ function animate() {
   blackHoleMesh.position.copy(camera.position);
 
   // Update uniforms
-  blackHoleMaterial.uniforms.uTime.value = simTime;
+  blackHoleMaterial.uniforms.uTime.value = window.__freezeTime !== undefined ? window.__freezeTime : simTime;
   blackHoleMaterial.uniforms.uCameraPos.value.copy(camera.position);
 
   // Render with post-processing

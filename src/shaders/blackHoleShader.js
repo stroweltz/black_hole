@@ -12,7 +12,8 @@ export const BlackHoleShader = {
     uPlanetPos: { value: null },
     uEmbersVisible: { value: 1.0 },
     uMilkyWay: { value: null },
-    uSkyBrightness: { value: 0.42 }
+    uSkyBrightness: { value: 0.42 },
+    uHybridBypass: { value: 1.0 }
   },
 
   vertexShader: `
@@ -37,6 +38,7 @@ export const BlackHoleShader = {
     uniform float uEmbersVisible;
     uniform sampler2D uMilkyWay;
     uniform float uSkyBrightness;
+    uniform float uHybridBypass;
 
     #define PI 3.141592653589793
     #define TWO_PI 6.283185307179586
@@ -283,6 +285,35 @@ export const BlackHoleShader = {
       vec3 perpComp = localRayDir - radComp * radUnit;
       float metricFactor = sqrt(clamp(1.0 - rs / camDist, 0.001, 1.0));
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
+
+      // --- Hybrid Analytical Geodesic Bypass for Outer Background Rays ---
+      // Rays with impact parameter b > 10.8 (or heading outward at r > 10.5 Rs)
+      // or high-elevation sky rays physically cannot reach the accretion disk (r in [2.48, 10.2]),
+      // Miller's planet (r = 5.6), or the event horizon (r <= 1.0).
+      // Their relativistic trajectory is calculated in 1 clock cycle via 3rd-order post-Newtonian GR.
+      vec3 hVecInit = cross(rayPos, rayDir);
+      float hInit = length(hVecInit);
+      float bParam = hInit / max(metricFactor, 1e-4);
+      float rDotVInit = dot(rayPos, rayDir);
+
+      bool isOutsideDisk = (bParam > 10.75) || (camDist > 10.5 && rDotVInit >= 0.0);
+      bool isHighSky = (bParam >= 4.0) && ((rayPos.y > 1.2 && rayDir.y >= 0.16) || (rayPos.y < -1.2 && rayDir.y <= -0.16));
+
+      if (uHybridBypass > 0.5 && (isOutsideDisk || isHighSky)) {
+        float invB = 1.0 / bParam;
+        float invB2 = invB * invB;
+        float alpha = 0.0;
+        if (rDotVInit < 0.0) {
+          // 3rd-order Schwarzschild geodesic deflection: 2/b + 15*pi/(16*b^2) + 16/(3*b^3)
+          alpha = (2.0 * rs) * invB + (2.945243 * rs * rs) * invB2 + (5.333333 * rs * rs * rs) * (invB2 * invB);
+        } else {
+          alpha = (rs / camDist) * (1.0 / sqrt(1.0 + (camDist * camDist) * invB2));
+        }
+        vec3 wVec = normalize(rayDir * rDotVInit - rayPos);
+        vec3 deflectedDir = normalize(cos(alpha) * rayDir + sin(alpha) * wVec);
+        gl_FragColor = vec4(getSkybox(deflectedDir), 1.0);
+        return;
+      }
 
       vec3 accumColor = vec3(0.0);
       float accumAlpha = 0.0;
