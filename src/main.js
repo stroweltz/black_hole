@@ -269,7 +269,7 @@ function activatePreset(name) {
   showToast(t(preset.toastKey, currentLang));
 
   // Update preset button active states
-  ['orbit', 'sphere', 'portal'].forEach(id => {
+  ['orbit', 'portal'].forEach(id => {
     const el = document.getElementById(`btn-view-${id}`);
     if (el) el.classList.toggle('active', id === name);
   });
@@ -277,21 +277,15 @@ function activatePreset(name) {
 
 // --- UI Binding ---
 const btnViewOrbit = document.getElementById('btn-view-orbit');
-const btnViewSphere = document.getElementById('btn-view-sphere');
 const btnViewPortal = document.getElementById('btn-view-portal');
 
 if (btnViewOrbit) btnViewOrbit.addEventListener('click', () => activatePreset('orbit'));
-if (btnViewSphere) btnViewSphere.addEventListener('click', () => activatePreset('sphere'));
 if (btnViewPortal) btnViewPortal.addEventListener('click', () => activatePreset('portal'));
 
 function updatePresetButtons() {
   if (btnViewOrbit) {
     btnViewOrbit.title = t('btnPresetOrbitTitle', currentLang);
     btnViewOrbit.innerHTML = `<span>🪐</span> ${t('btnPresetOrbitText', currentLang)}`;
-  }
-  if (btnViewSphere) {
-    btnViewSphere.title = t('btnPresetSphereTitle', currentLang);
-    btnViewSphere.innerHTML = `<span>🌀</span> ${t('btnPresetSphereText', currentLang)}`;
   }
   if (btnViewPortal) {
     btnViewPortal.title = t('btnPresetPortalTitle', currentLang);
@@ -305,36 +299,6 @@ const telShadow = document.getElementById('tel-shadow');
 const telDilation = document.getElementById('tel-dilation');
 const telFps = document.getElementById('tel-fps');
 const telemetryTitle = document.getElementById('telemetry-title');
-
-// Metric Mode: true = Kerr (extreme spin / Interstellar), false = Schwarzschild (static)
-let isKerrMetric = true;
-const btnMetricToggle = document.getElementById('btn-metric-toggle');
-const metricIcon = document.getElementById('metric-icon');
-const metricLabel = document.getElementById('metric-label');
-
-function updateMetricUI() {
-  if (!btnMetricToggle) return;
-  btnMetricToggle.title = t('btnMetricTitle', currentLang);
-  if (isKerrMetric) {
-    btnMetricToggle.classList.add('active');
-    if (metricIcon) metricIcon.textContent = '🌀';
-    if (metricLabel) metricLabel.textContent = t('metricKerrText', currentLang);
-    if (telemetryTitle) telemetryTitle.textContent = t('telemetryTitleKerr', currentLang);
-  } else {
-    btnMetricToggle.classList.remove('active');
-    if (metricIcon) metricIcon.textContent = '⚫';
-    if (metricLabel) metricLabel.textContent = t('metricSchwText', currentLang);
-    if (telemetryTitle) telemetryTitle.textContent = t('telemetryTitleSchw', currentLang);
-  }
-}
-
-if (btnMetricToggle) {
-  btnMetricToggle.addEventListener('click', () => {
-    isKerrMetric = !isKerrMetric;
-    updateMetricUI();
-    showToast(isKerrMetric ? t('toastMetricKerr', currentLang) : t('toastMetricSchw', currentLang), 3500);
-  });
-}
 
 // Control Buttons & Inputs
 const btnBloom = document.getElementById('btn-bloom');
@@ -635,10 +599,10 @@ export function setAppLanguage(lang) {
   if (telLabelFps) telLabelFps.textContent = t('telFpsLabel', lang);
 
   // 6. Buttons & Toggles
+  if (telemetryTitle) telemetryTitle.textContent = t('telemetryTitleKerr', lang);
   updateToggleUIButton();
   updateLangToggleButton();
   updatePresetButtons();
-  updateMetricUI();
   updateHQ_UI();
   updateAudioUI();
   updateFullscreenUI();
@@ -885,40 +849,30 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.1);
   const camR = camera.position.length();
 
-  let dilationHTML;
+  // --- Kerr Metric (Gargantua / Interstellar Extreme Spin Model) ---
+  // At Endurance orbit (r = 15.2): gamma ≈ 1.06 (1 hr ≈ 1 hr Earth time)
+  // At Miller's Planet (r = 5.6): gamma = 61,320 (1 hr = 7.0 Earth years)
+  // At Horizon (r -> 1.06): gamma > 100,000 (1 hr = centuries / epochs)
+  let kerrDilation;
+  if (camR >= 5.6) {
+    const x = (camR - 5.6) / 2.0;
+    kerrDilation = 1.0 + 61319.0 * Math.exp(-x * x * 0.6);
+  } else {
+    const u = Math.max(0.05, camR - 1.0);
+    kerrDilation = 61320.0 * Math.pow(4.6 / u, 1.2);
+  }
+  const dilationHTML = formatKerrDilation(kerrDilation);
+
+  // Relativistic orbital speed of external Miller's planet as seen by the observer:
   let orbitMultiplier;
   let visualTimeMultiplier;
-
-  if (isKerrMetric) {
-    // --- Kerr Metric (Gargantua / Interstellar Extreme Spin Model) ---
-    // At Endurance orbit (r = 15.2): gamma ≈ 1.06 (1 hr ≈ 1 hr Earth time)
-    // At Miller's Planet (r = 5.6): gamma = 61,320 (1 hr = 7.0 Earth years)
-    // At Horizon (r -> 1.06): gamma > 100,000 (1 hr = centuries / epochs)
-    let kerrDilation;
-    if (camR >= 5.6) {
-      const x = (camR - 5.6) / 2.0;
-      kerrDilation = 1.0 + 61319.0 * Math.exp(-x * x * 0.6);
-    } else {
-      const u = Math.max(0.05, camR - 1.0);
-      kerrDilation = 61320.0 * Math.pow(4.6 / u, 1.2);
-    }
-    dilationHTML = formatKerrDilation(kerrDilation);
-
-    // Relativistic orbital speed of external Miller's planet as seen by the observer:
-    if (camR >= 5.6) {
-      orbitMultiplier = 1.0;
-      visualTimeMultiplier = 1.0;
-    } else {
-      const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - 1.06)));
-      orbitMultiplier = 1.0 + Math.pow(depth, 1.7) * 44.0;
-      visualTimeMultiplier = 1.0 + Math.pow(depth, 1.7) * 2.8;
-    }
+  if (camR >= 5.6) {
+    orbitMultiplier = 1.0;
+    visualTimeMultiplier = 1.0;
   } else {
-    // --- Schwarzschild Metric (Static, non-rotating black hole) ---
-    const schwDilation = 1.0 / Math.sqrt(Math.max(0.001, 1.0 - 1.0 / camR));
-    dilationHTML = `× ${schwDilation < 100 ? schwDilation.toFixed(2) : '∞'}`;
-    orbitMultiplier = Math.min(4.0, schwDilation);
-    visualTimeMultiplier = Math.min(2.5, schwDilation);
+    const depth = Math.max(0.0, Math.min(1.0, (5.6 - camR) / (5.6 - 1.06)));
+    orbitMultiplier = 1.0 + Math.pow(depth, 1.7) * 44.0;
+    visualTimeMultiplier = 1.0 + Math.pow(depth, 1.7) * 2.8;
   }
 
   simTime += delta * visualTimeMultiplier;
