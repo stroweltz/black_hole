@@ -18,7 +18,8 @@
 
 const BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || './';
 const normalizedBase = BASE.endsWith('/') ? BASE : BASE + '/';
-export const DEFAULT_AUDIO_URL = `${normalizedBase}audio/Data Sonification_ Black Hole at the Center of the Perseus Galaxy Cluster (X-ray).mp3`;
+const versionSuffix = typeof __APP_VERSION__ !== 'undefined' ? `?v=${__APP_VERSION__}` : '';
+export const DEFAULT_AUDIO_URL = `${normalizedBase}audio/Data Sonification_ Black Hole at the Center of the Perseus Galaxy Cluster (X-ray).mp3${versionSuffix}`;
 
 export const AUDIO_CONFIG = {
   shiftMode: 'blue',          // 'blue' (gravitational blueshift for falling observer) or 'red'

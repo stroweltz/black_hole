@@ -15,6 +15,38 @@ import { t, TRANSLATIONS, getInitialLanguage, saveLanguage } from './i18n.js';
 // --- Global Localization State ---
 let currentLang = getInitialLanguage();
 
+// --- App Version & Automatic Cache Invalidation ---
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.1';
+const STORAGE_VERSION_KEY = 'gargantua_app_version';
+
+(function handleVersionUpgrade() {
+  try {
+    const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+    if (storedVersion && storedVersion !== APP_VERSION) {
+      console.log(`[Gargantua] Detected version change: ${storedVersion} -> ${APP_VERSION}. Purging browser cache...`);
+
+      // 1. Purge Cache Storage API
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => caches.delete(name));
+        });
+      }
+
+      // 2. Unregister legacy / stale Service Workers
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+    }
+    localStorage.setItem(STORAGE_VERSION_KEY, APP_VERSION);
+  } catch (e) {
+    // Ignore in restrictive sandboxes
+  }
+})();
+
 // --- WebGL Support Check ---
 function isWebGLAvailable() {
   try {
@@ -157,7 +189,7 @@ loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
 // --- Skybox Texture: Deep Space Milky Way with Pinpoint Stars ---
 const texLoader = new THREE.TextureLoader(loadingManager);
 
-const milkyWayTex = texLoader.load('./milkyway.jpg');
+const milkyWayTex = texLoader.load(`./milkyway.jpg?v=${APP_VERSION}`);
 milkyWayTex.wrapS = THREE.RepeatWrapping;
 milkyWayTex.wrapT = THREE.ClampToEdgeWrapping;
 milkyWayTex.minFilter = THREE.LinearFilter;
