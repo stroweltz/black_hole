@@ -3,6 +3,7 @@ import { SpaceFlightControls } from './controls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 import { BlackHoleShader } from './shaders/blackHoleShader.js';
@@ -205,6 +206,11 @@ const bloomPass = new UnrealBloomPass(
   0.84   // bloom threshold (only incandescent core & photon ring glow)
 );
 
+// Morphological subpixel antialiasing: smooths high-frequency noise & jagged edges without blurring GR physics
+const smaaPass = new SMAAPass();
+smaaPass.enabled = true;
+window.smaaPass = smaaPass;
+
 const outputPass = new OutputPass();
 
 const composer = new EffectComposer(renderer);
@@ -213,6 +219,7 @@ window.scene = scene;
 window.composer = composer;
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
+composer.addPass(smaaPass);
 composer.addPass(outputPass);
 
 // --- Audio ---
@@ -333,6 +340,7 @@ if (btnMetricToggle) {
 const btnBloom = document.getElementById('btn-bloom');
 const btnParticles = document.getElementById('btn-particles');
 const btnPlanet = document.getElementById('btn-planet');
+const btnSmaa = document.getElementById('btn-smaa');
 const btnAudio = document.getElementById('btn-audio');
 const btnFullscreen = document.getElementById('btn-fullscreen');
 const sliderSpeed = document.getElementById('slider-speed');
@@ -449,6 +457,16 @@ if (btnPlanet) {
   });
 }
 
+let smaaOn = true;
+if (btnSmaa) {
+  btnSmaa.addEventListener('click', () => {
+    smaaOn = !smaaOn;
+    smaaPass.enabled = smaaOn;
+    btnSmaa.classList.toggle('active', smaaOn);
+    showToast(smaaOn ? t('toastSmaaOn', currentLang) : t('toastSmaaOff', currentLang));
+  });
+}
+
 function updateAudioUI() {
   if (!btnAudio) return;
   btnAudio.title = t('btnAudioTitle', currentLang);
@@ -555,6 +573,10 @@ function updateFxButtons() {
   if (btnPlanet) {
     btnPlanet.title = t('btnPlanetTitle', currentLang);
     btnPlanet.innerHTML = `<span>🪐</span> ${t('btnPlanetText', currentLang)}`;
+  }
+  if (btnSmaa) {
+    btnSmaa.title = t('btnSmaaTitle', currentLang);
+    btnSmaa.innerHTML = `<span>〰️</span> ${t('btnSmaaText', currentLang)}`;
   }
   updateUploadBgButton();
 }
@@ -997,9 +1019,11 @@ function handleResize() {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
 
+  const dpr = getOptimalDPR();
   renderer.setSize(width, height);
-  renderer.setPixelRatio(getOptimalDPR());
+  renderer.setPixelRatio(dpr);
 
+  composer.setPixelRatio(dpr);
   composer.setSize(width, height);
   const bScale = getBloomScale();
   bloomPass.setSize(
