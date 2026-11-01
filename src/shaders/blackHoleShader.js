@@ -301,17 +301,13 @@ export const BlackHoleShader = {
       bool isOutsideDisk = (camDist > 11.0) && (bParam > 11.5 || rDotVInit >= 0.0);
 
       if (uHybridBypass > 0.5 && isOutsideDisk) {
-        float invB = 1.0 / bParam;
-        float invB2 = invB * invB;
-        float alpha = 0.0;
-        if (rDotVInit < 0.0) {
-          // 3rd-order Schwarzschild geodesic deflection: 2/b + 15*pi/(16*b^2) + 16/(3*b^3)
-          alpha = (2.0 * rs) * invB + (2.945243 * rs * rs) * invB2 + (5.333333 * rs * rs * rs) * (invB2 * invB);
-        } else {
-          alpha = (rs / camDist) * (1.0 / sqrt(1.0 + (camDist * camDist) * invB2));
-        }
-        vec3 wVec = normalize(rayDir * rDotVInit - rayPos);
-        vec3 deflectedDir = normalize(cos(alpha) * rayDir + sin(alpha) * wVec);
+        // Continuous weak-field GR deflection from camera position to infinity:
+        // C1-continuous across all impact parameters and angles (zero step seams)
+        float cosA0 = clamp(rDotVInit / max(camDist, 1e-4), -1.0, 1.0);
+        vec3 bVec0 = rayPos - rDotVInit * rayDir;
+        float bSq0 = dot(bVec0, bVec0);
+        float tailFactor0 = max(0.0, 1.0 - (3.0 * cosA0 - cosA0 * cosA0 * cosA0) * 0.5);
+        vec3 deflectedDir = normalize(rayDir - bVec0 * (rs / max(bSq0, 0.04) * tailFactor0));
         gl_FragColor = vec4(getSkybox(deflectedDir), 1.0);
         return;
       }
@@ -479,7 +475,17 @@ export const BlackHoleShader = {
         if (dot(rayPos, rayDir) <= 0.0) {
           hitHorizon = true;
         } else {
-          vec3 sky = getSkybox(rayDir);
+          // Continuous asymptotic tail integration to infinity:
+          // Analytically integrates d^2r/dlambda^2 = -1.5*rs*(h^2/r^5)*r from current (rayPos, rayDir) to infinity.
+          // Cancels discrete step-quantization rings ("пошаговые швы") with first-order accuracy.
+          float exitR = length(rayPos);
+          float radProj = dot(rayPos, rayDir);
+          float cosA = clamp(radProj / max(exitR, 1e-4), -1.0, 1.0);
+          vec3 bVec = rayPos - radProj * rayDir;
+          float bSq = dot(bVec, bVec);
+          float tailFactor = max(0.0, 1.0 - (3.0 * cosA - cosA * cosA * cosA) * 0.5);
+          vec3 finalRayDir = normalize(rayDir - bVec * (rs / max(bSq, 0.04) * tailFactor));
+          vec3 sky = getSkybox(finalRayDir);
           accumColor += (1.0 - accumAlpha) * sky;
         }
       }
