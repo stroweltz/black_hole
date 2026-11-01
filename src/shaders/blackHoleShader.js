@@ -287,19 +287,20 @@ export const BlackHoleShader = {
       vec3 rayDir = normalize(radComp * metricFactor * radUnit + perpComp);
 
       // --- Hybrid Analytical Geodesic Bypass for Outer Background Rays ---
-      // Rays with impact parameter b > 10.8 (or heading outward at r > 10.5 Rs)
-      // or high-elevation sky rays physically cannot reach the accretion disk (r in [2.48, 10.2]),
+      // Rays that physically cannot reach the accretion disk (r in [2.48, 10.2]),
       // Miller's planet (r = 5.6), or the event horizon (r <= 1.0).
-      // Their relativistic trajectory is calculated in 1 clock cycle via 3rd-order post-Newtonian GR.
+      // Exact physical theorem: if the camera is outside the disk system (camDist > 11.0 Rs),
+      // any ray directed outward (rDotVInit >= 0) or with impact parameter b > 11.5 Rs
+      // has r(lambda) >= rMin > 10.2 Rs everywhere along its geodesic.
+      // It can never touch the disk or any emitter.
       vec3 hVecInit = cross(rayPos, rayDir);
       float hInit = length(hVecInit);
       float bParam = hInit / max(metricFactor, 1e-4);
       float rDotVInit = dot(rayPos, rayDir);
 
-      bool isOutsideDisk = (bParam > 10.75) || (camDist > 10.5 && rDotVInit >= 0.0);
-      bool isHighSky = (bParam >= 4.0) && ((rayPos.y > 1.2 && rayDir.y >= 0.16) || (rayPos.y < -1.2 && rayDir.y <= -0.16));
+      bool isOutsideDisk = (camDist > 11.0) && (bParam > 11.5 || rDotVInit >= 0.0);
 
-      if (uHybridBypass > 0.5 && (isOutsideDisk || isHighSky)) {
+      if (uHybridBypass > 0.5 && isOutsideDisk) {
         float invB = 1.0 / bParam;
         float invB2 = invB * invB;
         float alpha = 0.0;
