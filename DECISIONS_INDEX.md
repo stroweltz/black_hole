@@ -180,7 +180,7 @@ $$\frac{d V_{\text{eff}}}{dr} = \frac{3r_s - 2r}{r^4}$$
 ## 8. Акустическая модель: Сонификация NASA Perseus и непрерывный блюзшифт
 
 ### Возврат оригинального звука:
-* Из коммитов ранней разработки возвращен файл подлинной сонификации NASA Chandra скопления Персея [`public/audio/Data Sonification_ Black Hole at the Center of the Perseus Galaxy Cluster (X-ray).mp3`](file:///C:/Users/temp/Desktop/ПРОЕКТЫ/black_hole/public/audio/).
+* Из коммитов ранней разработки возвращен файл подлинной сонификации NASA Chandra скопления Персея [`public/audio/Data Sonification_ Black Hole at the Center of the Perseus Galaxy Cluster (X-ray).mp3`](file:///C:/Users/temp/Desktop/ПРОЕКТЫ/black_hole/public/audio/) с полной юридической лицензией и атрибуцией (см. [`AUDIO_LICENSE.md`](AUDIO_LICENSE.md) и [`public/audio/LICENSE.txt`](public/audio/LICENSE.txt)).
 * **Устранение тишины и бесшовный цикл (`makeSeamlessBuffer`)**: в оригинальной записи NASA последние 3.8 секунды представляли собой цифровую тишину. Функция детектирует спад амплитуды ниже 0.012, обрезает хвост и выполняет $2.5$-секундный равномощностный кроссфейд head-to-tail, обеспечивая непрерывное зацикливание без пауз.
 * **Случайный старт**: при каждом включении аудио воспроизведение стартует со случайного момента строго в первой половине записи ($t_0 \in [0, 0.48 \cdot \text{duration}]$).
 * **Ликвидация скачка частоты на $13-15\,R_s$**:

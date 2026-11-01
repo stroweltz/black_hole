@@ -3,7 +3,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Гаргантюа — Симуляция Чёрной Дыры</title>
+  <title>Гаргантюа — 3D-симуляция сверхмассивной чёрной дыры</title>
+
+  <!-- Primary Meta Tags -->
+  <meta name="title" content="Гаргантюа — 3D-симуляция сверхмассивной чёрной дыры">
+  <meta name="description" content="Интерактивная 3D-симуляция вращающейся чёрной дыры Керра в реальном времени на Three.js и WebGL. Гравитационное линзирование, аккреционный диск, релятивистский эффект Доплера и дилатация времени.">
+  <meta name="keywords" content="гаргантюа, чёрная дыра, симуляция чёрной дыры, гравитационное линзирование, интерстеллар, метрика керра, аккреционный диск, three.js, webgl, релятивистские эффекты, black hole simulation, gargantua">
+  <meta name="author" content="stroweltz">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#020204">
+  <link rel="canonical" href="https://stroweltz.github.io/black_hole/">
+
+  <!-- Open Graph / Facebook / VK / Telegram -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://stroweltz.github.io/black_hole/">
+  <meta property="og:title" content="Гаргантюа — 3D-симуляция сверхмассивной чёрной дыры">
+  <meta property="og:description" content="Интерактивная симуляция чёрной дыры Керра на Three.js: гравитационное линзирование, аккреционный диск и физика Эйнштейна в реальном времени.">
+  <meta property="og:image" content="https://stroweltz.github.io/black_hole/loading_bg.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="675">
+  <meta property="og:site_name" content="Гаргантюа (Gargantua Simulation)">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:locale:alternate" content="en_US">
+
+  <!-- Twitter Cards -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://stroweltz.github.io/black_hole/">
+  <meta name="twitter:title" content="Гаргантюа — 3D-симуляция сверхмассивной чёрной дыры">
+  <meta name="twitter:description" content="Интерактивная симуляция чёрной дыры Керра на Three.js: гравитационное линзирование, аккреционный диск и физика Эйнштейна в реальном времени.">
+  <meta name="twitter:image" content="https://stroweltz.github.io/black_hole/loading_bg.jpg">
+
+  <!-- Schema.org JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Гаргантюа — 3D-симуляция сверхмассивной чёрной дыры",
+    "alternateName": "Gargantua Kerr Black Hole 3D Simulation",
+    "url": "https://stroweltz.github.io/black_hole/",
+    "description": "Интерактивная 3D-симуляция сверхмассивной вращающейся чёрной дыры Гаргантюа в реальном времени с поддержкой гравитационного линзирования, аккреционного диска и релятивистского замедления времени.",
+    "applicationCategory": "EducationalApplication",
+    "genre": "Science Simulation / Astronomy",
+    "browserRequirements": "Requires WebGL support",
+    "operatingSystem": "All (Cross-platform)",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "stroweltz",
+      "url": "https://github.com/stroweltz"
+    }
+  }
+  </script>
+
   <link rel="stylesheet" href="./src/style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22black%22 stroke=%22%23ff9933%22 stroke-width=%228%22/></svg>">
 </head>
@@ -61,7 +116,7 @@
           <div class="telemetry-grid">
             <div class="telemetry-item">
               <span id="tel-label-radius" class="telemetry-label">РАССТОЯНИЕ (r)</span>
-              <span id="tel-radius" class="telemetry-value">15.20 <span class="unit">Rs</span></span>
+              <span id="tel-radius" class="telemetry-value">54.00 <span class="unit">Rs</span></span>
             </div>
             <div class="telemetry-item">
               <span id="tel-label-shadow" class="telemetry-label">ТЕНЬ НА НЕБЕ</span>
@@ -176,6 +231,41 @@
       </button>
     </div>
   </div>
+
+  <!-- Search Engine Optimization & Accessibility Semantic Content -->
+  <main class="sr-only">
+    <article>
+      <h2>О проекте «Гаргантюа — 3D-симуляция сверхмассивной чёрной дыры»</h2>
+      <p>
+        «Гаргантюа» — это интерактивная веб-симуляция в реальном времени, созданная на базе Three.js и WebGL2. 
+        Проект воссоздает визуальные и релятивистские эффекты в окрестности быстро вращающейся сверхмассивной чёрной дыры (метрика Керра),
+        вдохновлённой фильмом «Интерстеллар» Кристофера Нолана и научными расчётами Кипа Торна.
+      </p>
+      
+      <h3>Ключевые физические явления</h3>
+      <ul>
+        <li><strong>Гравитационное линзирование:</strong> Искривление световых лучей в экстремальном гравитационном поле чёрной дыры, формирующее первичное и вторичное изображения аккреционного диска и окружающего звёздного неба (Млечного Пути).</li>
+        <li><strong>Релятивистский эффект Доплера и усиление яркости:</strong> Плазма аккреционного диска, движущаяся по направлению к наблюдателю с околосветовой скоростью, становится ярче и испытывает синее смещение, а удаляющаяся — тускнеет и краснеет.</li>
+        <li><strong>Гравитационное замедление времени (дилатация):</strong> Вблизи горизонта событий время замедляется вплоть до бесконечности относительно удалённого наблюдателя.</li>
+        <li><strong>Орбита планеты Миллер:</strong> Орбитальная механика на расстоянии r = 5.6 Rs с кинематическим и гравитационным замедлением времени (1 час на планете равен 7 земным годам).</li>
+        <li><strong>Окно Вселенной (Субфотонная глубина):</strong> При погружении к фотонной сфере (r = 1.06 Rs) гравитационная тень закрывает до 90% небосвода, собирая весь свет внешней Вселенной в светящийся оптический круг.</li>
+      </ul>
+
+      <h3>Управление симуляцией</h3>
+      <p>
+        Поддерживается как клавиатурное управление на ПК (WASD для перемещения в 6 степенях свободы, мышь для панорамного обзора 360°, Shift для ускорения, Space/C для изменения высоты), 
+        так и мобильные сенсорные устройства с аналоговым джойстиком и кнопками форсажа.
+      </p>
+    </article>
+  </main>
+
+  <noscript>
+    <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:#020204;color:#fff;padding:40px;box-sizing:border-box;z-index:999999;font-family:sans-serif;overflow-y:auto;">
+      <h1>Гаргантюа — Интерактивная 3D-симуляция Чёрной Дыры</h1>
+      <p>Для интерактивного взаимодействия и рендеринга 3D-графики в реальном времени требуется включённый JavaScript и поддержка WebGL в вашем браузере.</p>
+      <p>Проект моделирует гравитационное линзирование, вращающуюся метрику Керра, аккреционный диск и релятивистские оптические эффекты в реальном времени.</p>
+    </div>
+  </noscript>
 
   <script>
     // Toggle UI visibility logic

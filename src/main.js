@@ -103,9 +103,9 @@ canvasContainer.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-// Default camera framing matching the reference image 78ad4686-ce49-480e-abcc-71353d1d55e6.jpg
-const REF_CAM_POS = new THREE.Vector3(-9.2, 2.7, 11.8);
-const REF_TARGET = new THREE.Vector3(1.6, 0.45, 0.0);
+// Default camera framing: deep space spawn at the maximum outer distance boundary (~54 Rs)
+const REF_CAM_POS = new THREE.Vector3(-32.67, 9.59, 41.91);
+const REF_TARGET = new THREE.Vector3(0.0, 0.0, 0.0);
 
 camera.position.copy(REF_CAM_POS);
 camera.lookAt(REF_TARGET);
@@ -247,8 +247,8 @@ const planetPos = new THREE.Vector3();
 // Iconic Camera Presets across Spacetime
 const PRESETS = {
   ref: {
-    pos: new THREE.Vector3(-9.2, 2.7, 11.8),
-    target: new THREE.Vector3(1.6, 0.45, 0.0),
+    pos: new THREE.Vector3(-32.67, 9.59, 41.91),
+    target: new THREE.Vector3(0.0, 0.0, 0.0),
     toastKey: 'toastPresetRef'
   },
   orbit: {

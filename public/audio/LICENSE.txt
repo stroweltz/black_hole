@@ -1,0 +1,71 @@
+================================================================================
+AUDIO ASSET LICENSE & ATTRIBUTION
+NASA Chandra X-ray Observatory Perseus Black Hole Sonification
+================================================================================
+
+File:
+  Data Sonification_ Black Hole at the Center of the Perseus Galaxy Cluster (X-ray).mp3
+
+Official Title:
+  Data Sonification: Black Hole at the Center of the Perseus Galaxy Cluster (X-ray)
+
+Release Date:
+  May 4, 2022
+
+Observatory:
+  NASA's Chandra X-ray Observatory / Chandra X-ray Center (CXC)
+
+Required Credit / Attribution:
+  Sonification: NASA/CXC/SAO/K.Arcand, SYSTEM Sounds (M. Russo, A. Santaguida)
+
+Official Links:
+  Release Page:     https://chandra.si.edu/photo/2022/sonify5/
+  Media Use Policy: https://chandra.si.edu/about/copyright.html
+  Chandra Homepage: https://chandra.si.edu/
+
+--------------------------------------------------------------------------------
+ASTROPHYSICAL & ACOUSTIC BACKGROUND
+--------------------------------------------------------------------------------
+In 2003, astronomers using NASA's Chandra X-ray Observatory detected acoustic
+pressure waves (sound waves) in the hot intracluster gas surrounding the
+supermassive black hole at the center of the Perseus galaxy cluster
+(Perseus A / NGC 1275). These waves correspond to a musical note 57 octaves below
+middle C (a fundamental frequency of B-flat, ~10 million-year period,
+roughly 3.2 x 10^-15 Hz).
+
+In this official sonification by the Chandra team and SYSTEM Sounds, these
+astrophysical pressure waves were scanned radially (sweeping clockwise from the
+center like radar) and re-synthesized into the human audible range by scaling
+them up by 57 and 58 octaves (144 quadrillion and 288 quadrillion times higher
+than their original pitch).
+
+--------------------------------------------------------------------------------
+CHANDRA MEDIA USE POLICY & TERMS OF USE
+--------------------------------------------------------------------------------
+Unless otherwise stated, all data, audio, images, and video produced by the
+Chandra X-ray Center (CXC) are in the public domain and may be used for
+educational, informational, non-commercial, and commercial purposes with
+proper credit given.
+
+Terms and Conditions:
+1. Credit: Any publication, distribution, or derivative work incorporating
+   this audio recording must provide appropriate credit:
+   "Sonification: NASA/CXC/SAO/K.Arcand, SYSTEM Sounds (M. Russo, A. Santaguida)"
+2. Non-Endorsement: Use of NASA / Chandra materials does not imply endorsement
+   by NASA, the Smithsonian Astrophysical Observatory (SAO), or the authors
+   of any product, service, or commercial venture.
+3. Integrity: The data and sonification may not be used in an intentionally
+   misleading or defamatory context.
+
+--------------------------------------------------------------------------------
+USAGE IN THIS PROJECT ("GARGANTUA")
+--------------------------------------------------------------------------------
+In this simulation, this recording serves as the physical ambient audio
+environment, warped in real time via the Web Audio API according to General
+Relativity:
+- Relativistic gravitational blueshift / frequency shift:
+  gamma_audio = 1 / sqrt(max(0.0005, 1 - 1/r))
+- Seamless loop with equal-power crossfade (trailing digital silence trimmed)
+- Dynamic limiting via DynamicsCompressorNode (threshold -4 dB, ratio 6:1)
+- Comfort Mode: centered stereo image to avoid vestibular motion sickness
+================================================================================

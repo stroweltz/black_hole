@@ -426,14 +426,10 @@ export class SpaceFlightControls {
         matched = true;
         break;
       case 'Space':
-      case 'KeyE':
         this.keys.up = isDown;
         matched = true;
         break;
       case 'KeyC':
-      case 'KeyQ':
-      case 'ControlLeft':
-      case 'ControlRight':
         this.keys.down = isDown;
         matched = true;
         break;
